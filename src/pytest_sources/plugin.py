@@ -1,5 +1,7 @@
 import pytest
 
+pytest_plugins = ["pytest_sources._option"]
+
 
 @pytest.hookimpl
 def pytest_configure(config: pytest.Config) -> None:
