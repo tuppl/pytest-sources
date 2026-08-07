@@ -1,6 +1,6 @@
 import pytest
 
-pytest_plugins = ["pytest_sources._option"]
+pytest_plugins = ["pytest_sources._option", "pytest_sources._fanout"]
 
 
 @pytest.hookimpl
