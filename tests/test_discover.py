@@ -35,9 +35,7 @@ def test_expands_glob_to_directories(tree):
 
 
 def test_result_is_sorted_regardless_of_filesystem_order(tree):
-    assert discover(["submissions/*"], tree) == sorted(
-        discover(["submissions/*"], tree)
-    )
+    assert discover(["submissions/*"], tree) == sorted(discover(["submissions/*"], tree))
 
 
 def test_ignores_files_among_directory_matches(tree):
@@ -56,9 +54,7 @@ def test_unions_multiple_patterns(tree):
 
 
 def test_deduplicates_overlapping_patterns(tree):
-    assert relative(discover(["submissions/alice", "submissions/a*"], tree), tree) == [
-        "submissions/alice"
-    ]
+    assert relative(discover(["submissions/alice", "submissions/a*"], tree), tree) == ["submissions/alice"]
 
 
 def test_deduplicates_symlinked_directories(tree):
@@ -72,9 +68,7 @@ def test_deduplicates_symlinked_directories(tree):
 
 
 def test_accepts_absolute_pattern(tree):
-    assert discover([str(tree / "submissions/*_alt")], tree) == [
-        tree / "submissions/carol_alt"
-    ]
+    assert discover([str(tree / "submissions/*_alt")], tree) == [tree / "submissions/carol_alt"]
 
 
 def test_accepts_exact_path_without_magic(tree):
@@ -82,15 +76,11 @@ def test_accepts_exact_path_without_magic(tree):
 
 
 def test_accepts_pattern_escaping_the_root(tree):
-    assert relative(discover(["../submissions/*_alt"], tree / "other"), tree) == [
-        "submissions/carol_alt"
-    ]
+    assert relative(discover(["../submissions/*_alt"], tree / "other"), tree) == ["submissions/carol_alt"]
 
 
 def test_normalises_dotdot_when_deduplicating(tree):
-    assert discover(
-        ["submissions/alice", "submissions/../submissions/alice"], tree
-    ) == [tree / "submissions" / "alice"]
+    assert discover(["submissions/alice", "submissions/../submissions/alice"], tree) == [tree / "submissions" / "alice"]
 
 
 def test_recursive_pattern_includes_nested_directories(tree):

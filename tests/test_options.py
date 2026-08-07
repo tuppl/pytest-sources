@@ -64,9 +64,7 @@ def test_configure_stashes_root_relative_ids(submissions):
 def test_command_line_overrides_ini(submissions):
     submissions.makeini("[pytest]\nsources = submissions/*\n")
     config = submissions.parseconfigure("--sources", "submissions/alice")
-    assert [source.path for source in config.stash[SOURCES]] == [
-        submissions.path / "submissions" / "alice"
-    ]
+    assert [source.path for source in config.stash[SOURCES]] == [submissions.path / "submissions" / "alice"]
 
 
 def test_nothing_is_stashed_without_sources(submissions):

@@ -16,8 +16,7 @@ def discover(patterns: Sequence[str], root: Path) -> list[Path]:
         directories = {(root / m).resolve() for m in matches if (root / m).is_dir()}
         if not directories:
             raise pytest.UsageError(
-                f"sources glob matched {len(matches)} path(s), "
-                f"none of them directories: {pattern!r}"
+                f"sources glob matched {len(matches)} path(s), none of them directories: {pattern!r}"
             )
         sources |= directories
 

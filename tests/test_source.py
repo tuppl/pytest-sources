@@ -29,9 +29,7 @@ def sources(root):
         directory = root / "submissions" / name
         directory.mkdir(parents=True)
         (directory / "solution.py").write_text(f"VALUE = {value}\n")
-    return make_sources(
-        [root / "submissions" / "alice", root / "submissions" / "bob"], root
-    )
+    return make_sources([root / "submissions" / "alice", root / "submissions" / "bob"], root)
 
 
 @pytest.fixture
