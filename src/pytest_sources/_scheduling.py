@@ -1,4 +1,5 @@
-from collections.abc import Container, Sequence
+import os
+from collections.abc import Container, Generator, Sequence
 
 import pytest
 from xdist.remote import Producer
@@ -129,6 +130,24 @@ class SourceScheduling:
                 self.log(report_collection_diff(reference, collection, first_node.gateway.id, node.gateway.id))
                 same_collection = False
         return same_collection
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_cmdline_main(config: pytest.Config) -> Generator[None, object, object]:
+    """
+    Give every source its own process unless the user asked for otherwise.
+    """
+    unset = getattr(config.option, "numprocesses", None) is None
+    if unset and not _is_worker(config) and resolve(config):
+        config.option.numprocesses = "auto"
+    return (yield)
+
+
+def _is_worker(config: pytest.Config) -> bool:
+    """
+    Whether this process is running tests on behalf of a controller.
+    """
+    return "PYTEST_XDIST_WORKER" in os.environ or hasattr(config, "workerinput")
 
 
 @pytest.hookimpl
