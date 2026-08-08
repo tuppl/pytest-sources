@@ -2,6 +2,8 @@ import re
 
 import pytest
 
+from pytest_sources import source as source_module
+from pytest_sources._nodeid import DELIMITER
 from pytest_sources._stash import SOURCES
 
 
@@ -79,3 +81,35 @@ def test_glob_matching_nothing_is_a_usage_error(submissions):
 def test_markers_are_registered(pytester):
     result = pytester.runpytest("--markers")
     result.stdout.fnmatch_lines(["@pytest.mark.sources*", "@pytest.mark.no_sources*"])
+
+
+def test_a_source_containing_the_delimiter_is_rejected(pytester):
+    (pytester.path / "submissions" / f"a{DELIMITER}b").mkdir(parents=True)
+
+    with pytest.raises(pytest.UsageError, match="may not appear in a source path"):
+        pytester.parseconfigure("--sources", "submissions/*")
+
+
+def test_the_sources_marker_rejects_the_delimiter_too(pytester):
+    (pytester.path / "submissions" / f"a{DELIMITER}b").mkdir(parents=True)
+    pytester.makepyfile(
+        """
+        import pytest
+
+        @pytest.mark.sources("submissions/*")
+        def test_x(source): ...
+        """
+    )
+
+    result = pytester.runpytest()
+    result.stdout.fnmatch_lines(["*may not appear in a source path*"])
+    assert result.ret != 0
+
+
+def test_sources_sharing_an_id_are_rejected(pytester, monkeypatch):
+    monkeypatch.setattr(source_module, "_relative_id", lambda path, root: path.name)
+    for parent in ("submissions", "other"):
+        (pytester.path / parent / "alice").mkdir(parents=True)
+
+    with pytest.raises(pytest.UsageError, match="must have distinct ids"):
+        pytester.parseconfigure("--sources", "submissions/*", "--sources", "other/*")

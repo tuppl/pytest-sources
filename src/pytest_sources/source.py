@@ -1,10 +1,13 @@
 import importlib
 import os
 import sys
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
+
+import pytest
 
 
 class SourceImportError(ImportError):
@@ -68,7 +71,28 @@ class Source:
 
 
 def make_sources(paths: Sequence[Path], root: Path) -> list[Source]:
-    return [Source(path=path, id=_relative_id(path, root)) for path in paths]
+    sources = [Source(path=path, id=_relative_id(path, root)) for path in paths]
+    _validate(sources)
+    return sources
+
+
+def _validate(sources: Sequence[Source]) -> None:
+    """Reject ids that a nodeid could not be traced back to a single source."""
+    from pytest_sources._nodeid import DELIMITER
+
+    reserved = [source.id for source in sources if DELIMITER in source.id]
+    if reserved:
+        raise pytest.UsageError(
+            f"{DELIMITER!r} separates parameters in a test id and may not appear "
+            f"in a source path: {', '.join(reserved)}"
+        )
+
+    counts = Counter(source.id for source in sources)
+    duplicates = sorted(id for id, count in counts.items() if count > 1)
+    if duplicates:
+        raise pytest.UsageError(
+            f"sources must have distinct ids, but these are shared by more than one source: {', '.join(duplicates)}"
+        )
 
 
 def _relative_id(path: Path, root: Path) -> str:
