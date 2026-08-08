@@ -1,13 +1,14 @@
 from collections.abc import Iterator
 
 import pytest
+from _pytest.python import FunctionDefinition
 
 from pytest_sources._discover import discover
 from pytest_sources._stash import MARKER_SOURCES, SOURCES
 from pytest_sources.source import Source, make_sources
 
 
-@pytest.hookimpl
+@pytest.hookimpl(tryfirst=True)
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     if metafunc.definition.get_closest_marker("no_sources"):
         return
@@ -39,7 +40,7 @@ def source(request: pytest.FixtureRequest) -> Iterator[Source]:
     active.deactivate()
 
 
-def _sources_for(definition, config: pytest.Config) -> list[Source]:
+def _sources_for(definition: FunctionDefinition, config: pytest.Config) -> list[Source]:
     marker = definition.get_closest_marker("sources")
     if marker is not None and marker.args:
         return _marker_sources(tuple(marker.args), config)
