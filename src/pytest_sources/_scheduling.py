@@ -6,8 +6,8 @@ from xdist.remote import Producer
 from xdist.report import report_collection_diff
 from xdist.workermanage import WorkerController, parse_tx_spec_config
 
+from pytest_sources._discover import resolve
 from pytest_sources._nodeid import DELIMITER
-from pytest_sources._option import resolve
 from pytest_sources._stash import SOURCES
 
 UNFANNED = ""
