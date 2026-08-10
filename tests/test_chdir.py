@@ -153,3 +153,37 @@ def test_no_chdir_applies_to_a_whole_module(cwd_probe):
     pytester.runpytest("--sources", "submissions/*", "-n", "0").assert_outcomes(passed=2)
 
     assert (recorded / "fanned-alice").read_text() == str(pytester.path)
+
+
+def test_how_far_the_move_reaches(cwd_probe):
+    """Function-scoped fixtures move with the test; wider ones do not.
+
+    Autouse fixtures set up before other function-scoped ones, so a fixture the
+    test requests runs inside the source. A module-scoped fixture is already set
+    up by then, so it sees the directory pytest was started in.
+    """
+    pytester, recorded = cwd_probe
+    pytester.makepyfile(
+        """
+        import os, pathlib, pytest
+
+        @pytest.fixture
+        def function_scoped():
+            return os.getcwd()
+
+        @pytest.fixture(scope="module")
+        def module_scoped():
+            return os.getcwd()
+
+        def test_reach(source, function_scoped, module_scoped):
+            pathlib.Path(os.environ["CWDDIR"], "reach").write_text(
+                f"{function_scoped}|{module_scoped}|{os.getcwd()}"
+            )
+        """
+    )
+
+    pytester.runpytest("--sources", "submissions/*", "-n", "0").assert_outcomes(passed=2)
+
+    function, module, body = (recorded / "reach").read_text().split("|")
+    assert function == body == str(pytester.path / "submissions" / "bob")
+    assert module == str(pytester.path)

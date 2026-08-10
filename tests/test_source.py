@@ -96,9 +96,11 @@ def test_a_relative_path_resolves_inside_the_source(alice):
 
 
 def test_a_relative_path_misses_the_source_without_it(alice):
-    (alice / "data.txt").write_text("hello\n")
+    (alice / "only-in-the-source.txt").write_text("hello\n")
 
-    assert not Path("data.txt").exists()
+    assert not Path("only-in-the-source.txt").exists()
+    with alice.chdir():
+        assert Path("only-in-the-source.txt").exists()
 
 
 def test_chdir_nests(alice, bob):

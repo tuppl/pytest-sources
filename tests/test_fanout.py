@@ -135,8 +135,39 @@ def test_plain_import_of_a_source_module_works_inside_a_test(submissions):
         """
         def test_value(source):
             import solution
-            assert solution.VALUE in (1, 2)
+            assert solution.VALUE == {"alice": 1, "bob": 2}[source.name]
         """
     )
     result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
     result.assert_outcomes(passed=2)
+
+
+def test_no_sources_applies_to_a_whole_module(submissions):
+    submissions.makepyfile(
+        """
+        import pytest
+
+        pytestmark = pytest.mark.no_sources
+
+        def test_one(): pass
+        def test_two(): pass
+        """
+    )
+    result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
+    result.assert_outcomes(passed=2)
+
+
+def test_the_sources_marker_takes_several_globs(pytester):
+    for parent in ("submissions", "other"):
+        (pytester.path / parent / "alice").mkdir(parents=True)
+    pytester.makepyfile(
+        """
+        import pytest
+
+        @pytest.mark.sources("submissions/*", "other/*")
+        def test_x(source): pass
+        """
+    )
+    result = pytester.runpytest("-n", "0", "--collect-only", "-q")
+    assert "test_x[submissions/alice]" in result.stdout.str()
+    assert "test_x[other/alice]" in result.stdout.str()
