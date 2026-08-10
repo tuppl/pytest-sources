@@ -104,3 +104,54 @@ def test_unfanned_tests_still_run_under_xdist(submissions):
     )
     result = submissions.runpytest("--sources", "submissions/*", "-n", "3")
     result.assert_outcomes(passed=7)
+
+
+def test_a_crashing_source_does_not_take_the_others_down(pytester):
+    """A worker killed mid-test is replaced by xdist, and the run carries on.
+
+    --max-worker-restart=0 bounds it: the crash is reported once rather than
+    retried, since LoadScopeScheduling returns the whole work item to the queue
+    and the next worker crashes on it again.
+    """
+    for name in ("alice", "bob"):
+        (pytester.path / "submissions" / name).mkdir(parents=True)
+    pytester.makepyfile(
+        """
+        import os
+
+        def test_crashes(source):
+            if source.name == "alice":
+                os._exit(1)
+
+        def test_survives(source):
+            assert True
+        """
+    )
+
+    result = pytester.runpytest("--sources", "submissions/*", "-n", "2", "--max-worker-restart=0")
+
+    result.assert_outcomes(passed=2, failed=1)
+    result.stdout.fnmatch_lines(["*crashed while running*submissions/alice*"])
+
+
+def test_sources_sharing_a_basename_stay_separate(pytester):
+    """submissions/alice and other/alice are different sources with distinct ids."""
+    for parent in ("submissions", "other"):
+        directory = pytester.path / parent / "alice"
+        directory.mkdir(parents=True)
+        (directory / "solution.py").write_text(f"WHERE = {parent!r}\n")
+    pytester.makepyfile(
+        """
+        def test_which(source):
+            assert source.import_module("solution").WHERE == source.id.split("/")[0]
+        """
+    )
+
+    result = pytester.runpytest("--sources", "submissions/*", "--sources", "other/*", "-n", "2", "-v")
+
+    result.assert_outcomes(passed=2)
+    assignments = worker_assignments(result)
+    assert sorted(source for sources in assignments.values() for source in sources) == [
+        "other/alice",
+        "submissions/alice",
+    ]

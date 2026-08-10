@@ -105,6 +105,11 @@ def pytest_testnodedown(node: WorkerController, error: object | None) -> None:
     Fires before the scheduler is told the node has gone, so the replacement joins
     the run before the old node leaves it and xdist never sees zero active nodes.
     """
+    # A worker that died is replaced by xdist itself, against the
+    # --max-worker-restart budget. Cloning here as well would give it two.
+    if error is not None:
+        return
+
     dsession = node.config.pluginmanager.getplugin("dsession")
     scheduler = getattr(dsession, "sched", None)
     if not isinstance(scheduler, SourceScheduling):
