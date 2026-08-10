@@ -77,9 +77,13 @@ class SourceScheduling(LoadScopeScheduling):
         for nodeid in collection:
             sources.setdefault(source_of(nodeid, self._source_ids), []).append(nodeid)
 
+        # Each chunk is counted separately by --sources-maxfail, so splitting
+        # would turn a budget per source into a budget per chunk.
+        splittable = not self.config.getoption("sources_maxfail")
+
         scopes: dict[str, str] = {}
         for source_id, nodeids in sources.items():
-            chunks = min(max(1, self.numnodes // len(sources)), len(nodeids))
+            chunks = min(max(1, self.numnodes // len(sources)), len(nodeids)) if splittable else 1
             size = math.ceil(len(nodeids) / chunks)
             for position, nodeid in enumerate(nodeids):
                 scopes[nodeid] = f"{source_id}{DELIMITER}{position // size}"
