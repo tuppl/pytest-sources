@@ -155,7 +155,7 @@ def test_resolve_stashes_what_it_found(submission_dirs):
 
 
 def test_resolve_expands_the_globs_only_once(submission_dirs, monkeypatch):
-    """The result is cached because _workers and loadsource both ask for it.
+    """The result is cached because _workers and _schedule both ask for it.
 
     Without the cache the globs would be expanded again for every caller, and a
     source appearing mid-run would give two callers different answers.

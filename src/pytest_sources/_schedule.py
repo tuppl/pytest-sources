@@ -22,7 +22,7 @@ class SourceScheduling(LoadScopeScheduling):
 
     def __init__(self, config: pytest.Config, log: Producer | None = None) -> None:
         super().__init__(config, log)
-        self.log = Producer("loadsourcesched") if log is None else log.loadsourcesched
+        self.log = Producer("sourcesched") if log is None else log.sourcesched
         self._source_ids = {source.id for source in config.stash[SOURCES]}
         self._scopes: dict[str, str] | None = None
         self._served: set[WorkerController] = set()
