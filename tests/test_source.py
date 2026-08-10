@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -61,6 +62,50 @@ def test_str_is_the_id(alice):
 
 def test_is_path_like(alice):
     assert os.fspath(alice) == str(alice.path)
+
+
+def test_chdir_moves_into_the_source(alice):
+    with alice.chdir():
+        assert Path.cwd() == alice.path
+
+
+def test_chdir_restores_the_previous_directory(alice):
+    before = Path.cwd()
+
+    with alice.chdir():
+        pass
+
+    assert Path.cwd() == before
+
+
+def test_chdir_restores_even_when_the_block_raises(alice):
+    before = Path.cwd()
+
+    with pytest.raises(RuntimeError), alice.chdir():
+        raise RuntimeError("boom")
+
+    assert Path.cwd() == before
+
+
+def test_a_relative_path_resolves_inside_the_source(alice):
+    """The reason the method exists: open("data.txt") in a source finds its own."""
+    (alice / "data.txt").write_text("hello\n")
+
+    with alice.chdir():
+        assert Path("data.txt").read_text() == "hello\n"
+
+
+def test_a_relative_path_misses_the_source_without_it(alice):
+    (alice / "data.txt").write_text("hello\n")
+
+    assert not Path("data.txt").exists()
+
+
+def test_chdir_nests(alice, bob):
+    with alice.chdir():
+        with bob.chdir():
+            assert Path.cwd() == bob.path
+        assert Path.cwd() == alice.path
 
 
 def test_division_yields_a_path_inside_the_source(alice):

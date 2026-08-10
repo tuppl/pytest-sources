@@ -1,3 +1,4 @@
+import contextlib
 import importlib
 import os
 import sys
@@ -36,6 +37,9 @@ class Source:
 
     def __str__(self) -> str:
         return self.id
+
+    def chdir(self) -> contextlib.chdir:
+        return contextlib.chdir(self.path)
 
     def activate(self) -> None:
         global _active
