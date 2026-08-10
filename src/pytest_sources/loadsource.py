@@ -1,6 +1,6 @@
 import math
 import warnings
-from collections.abc import Container, Sequence
+from collections.abc import Sequence
 
 import pytest
 from xdist.remote import Producer
@@ -8,23 +8,8 @@ from xdist.scheduler.loadscope import LoadScopeScheduling
 from xdist.workermanage import WorkerController
 
 from pytest_sources._discover import resolve
-from pytest_sources._nodeid import DELIMITER
+from pytest_sources._nodeid import DELIMITER, source_of
 from pytest_sources._stash import SOURCES
-
-UNFANNED = ""
-
-
-def source_of(nodeid: str, source_ids: Container[str]) -> str:
-    """
-    Recover the source (directory) a test belongs to from its nodeid.
-
-    The source is always the first part of the nodeid up until the DELIMITER.
-    """
-    start = nodeid.find("[", nodeid.rfind("::") + 1)
-    if start == -1:
-        return UNFANNED
-    candidate = nodeid[start + 1 :].removesuffix("]").split(DELIMITER)[0]
-    return candidate if candidate in source_ids else UNFANNED
 
 
 class SourceScheduling(LoadScopeScheduling):

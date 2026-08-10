@@ -5,14 +5,14 @@ _nodeid replaces that separator with "+" while sources are in use, and _option
 refuses sources containing it, so the source is always everything before the
 first "+".
 
-Asserts on generated nodeids only. Nothing here calls source_of.
+Covers how the bracket is written, and source_of reading it back.
 
     uv run pytest tests/test_nodeid.py -v
 """
 
 import pytest
 
-from pytest_sources._nodeid import DELIMITER
+from pytest_sources._nodeid import DELIMITER, UNFANNED, source_of
 
 
 def make_sources(pytester, *names):
@@ -191,3 +191,50 @@ def test_the_original_delimiter_is_restored_on_unconfigure(pytester):
 
     assert CallSpec2.id is before
     assert CallSpec2(params={}, indices={}, _arg2scope={}, _idlist=["a", "b"]).id == "a-b"
+
+
+SOURCE_IDS = {
+    "submissions/alice",
+    "submissions/alice2",
+    "submissions/alice-alt",
+    "submissions/my-source",
+}
+
+
+def test_matches_a_lone_source():
+    assert source_of("t.py::test_x[submissions/alice]", SOURCE_IDS) == "submissions/alice"
+
+
+def test_matches_when_the_test_has_further_parameters():
+    assert source_of("t.py::test_x[submissions/alice+1]", SOURCE_IDS) == "submissions/alice"
+
+
+def test_matches_a_source_whose_name_contains_a_dash():
+    assert source_of("t.py::test_x[submissions/my-source+1]", SOURCE_IDS) == "submissions/my-source"
+
+
+def test_matches_a_dashed_parameter_value():
+    assert source_of("t.py::test_x[submissions/alice+a-b]", SOURCE_IDS) == "submissions/alice"
+
+
+def test_distinguishes_a_dashed_source_from_a_dashed_parameter():
+    # Without the reserved delimiter both of these would read as
+    # submissions/alice-alt.
+    assert source_of("t.py::test_x[submissions/alice-alt+1]", SOURCE_IDS) == "submissions/alice-alt"
+    assert source_of("t.py::test_x[submissions/alice+alt]", SOURCE_IDS) == "submissions/alice"
+
+
+def test_unparametrised_test_belongs_to_no_source():
+    assert source_of("t.py::test_x", SOURCE_IDS) == UNFANNED
+
+
+def test_unknown_parameter_belongs_to_no_source():
+    assert source_of("t.py::test_x[3]", SOURCE_IDS) == UNFANNED
+
+
+def test_matches_a_bare_nodeid_without_a_module_separator():
+    assert source_of("test_x[submissions/alice]", SOURCE_IDS) == "submissions/alice"
+
+
+def test_ignores_brackets_in_the_file_path():
+    assert source_of("dir[1]/t.py::test_x[submissions/alice]", SOURCE_IDS) == "submissions/alice"

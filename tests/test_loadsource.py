@@ -2,15 +2,6 @@ from collections import Counter
 
 import pytest
 
-from pytest_sources.loadsource import UNFANNED, source_of
-
-SOURCE_IDS = {
-    "submissions/alice",
-    "submissions/alice2",
-    "submissions/alice-alt",
-    "submissions/my-source",
-}
-
 
 def worker_assignments(result):
     """Map each worker id to the set of sources it ran tests for."""
@@ -22,45 +13,6 @@ def worker_assignments(result):
         source = line[line.rindex("[") + 1 : line.rindex("]")].split("+")[0]
         assignments.setdefault(worker, set()).add(source)
     return assignments
-
-
-def test_matches_a_lone_source():
-    assert source_of("t.py::test_x[submissions/alice]", SOURCE_IDS) == "submissions/alice"
-
-
-def test_matches_when_the_test_has_further_parameters():
-    assert source_of("t.py::test_x[submissions/alice+1]", SOURCE_IDS) == "submissions/alice"
-
-
-def test_matches_a_source_whose_name_contains_a_dash():
-    assert source_of("t.py::test_x[submissions/my-source+1]", SOURCE_IDS) == "submissions/my-source"
-
-
-def test_matches_a_dashed_parameter_value():
-    assert source_of("t.py::test_x[submissions/alice+a-b]", SOURCE_IDS) == "submissions/alice"
-
-
-def test_distinguishes_a_dashed_source_from_a_dashed_parameter():
-    # Without the reserved delimiter both of these would read as
-    # submissions/alice-alt.
-    assert source_of("t.py::test_x[submissions/alice-alt+1]", SOURCE_IDS) == "submissions/alice-alt"
-    assert source_of("t.py::test_x[submissions/alice+alt]", SOURCE_IDS) == "submissions/alice"
-
-
-def test_unparametrised_test_belongs_to_no_source():
-    assert source_of("t.py::test_x", SOURCE_IDS) == UNFANNED
-
-
-def test_unknown_parameter_belongs_to_no_source():
-    assert source_of("t.py::test_x[3]", SOURCE_IDS) == UNFANNED
-
-
-def test_matches_a_bare_nodeid_without_a_module_separator():
-    assert source_of("test_x[submissions/alice]", SOURCE_IDS) == "submissions/alice"
-
-
-def test_ignores_brackets_in_the_file_path():
-    assert source_of("dir[1]/t.py::test_x[submissions/alice]", SOURCE_IDS) == "submissions/alice"
 
 
 def test_one_worker_per_source(submissions):
