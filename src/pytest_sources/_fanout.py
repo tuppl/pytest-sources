@@ -8,6 +8,12 @@ from pytest_sources._stash import MARKER_SOURCES, SOURCES
 from pytest_sources.source import Source, make_sources
 
 
+@pytest.hookimpl
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "sources(*globs): run against matching sources")
+    config.addinivalue_line("markers", "no_sources: exempt from --sources fanout")
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     if metafunc.definition.get_closest_marker("no_sources"):
