@@ -24,14 +24,24 @@ def mixed(pytester):
     return pytester
 
 
+def section(result):
+    """The lines between the sources separator and whatever follows it."""
+    lines = result.outlines
+    start = next(i for i, line in enumerate(lines) if line.startswith("=") and " sources " in line)
+    body = []
+    for line in lines[start + 1 :]:
+        if line.startswith("="):
+            break
+        body.append(line)
+    return body
+
+
 def rows(result):
-    """The table body, keyed by source: passed, failed, error, skipped."""
-    found = {}
-    for line in result.outlines:
-        if line.startswith("submissions/"):
-            name, *values = line.split()
-            found[name] = values[:4]
-    return found
+    """The counts body, keyed by source: passed, failed, error, skipped."""
+    return {
+        line.split()[0]: line.split()[1:5]
+        for line in section(result)[1:]  # drop the header
+    }
 
 
 def test_reports_a_row_for_each_source(mixed):
@@ -90,3 +100,65 @@ def test_the_totals_are_the_same_under_xdist(mixed):
     distributed = rows(mixed.runpytest("--sources", "submissions/*", "-n", "2"))
 
     assert serial == distributed
+
+
+def grid(result):
+    """The grid body, keyed by row label, header and legend removed."""
+    body = section(result)[1:-1]
+    return {line.split()[0]: line.split()[1:] for line in body}
+
+
+def test_sources_grid_puts_a_source_on_each_row(mixed):
+    result = mixed.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=sources")
+
+    assert grid(result) == {
+        "submissions/alice": [".", "s", "."],
+        "submissions/bob": [".", "s", "F"],
+    }
+
+
+def test_tests_grid_is_the_transpose(mixed):
+    result = mixed.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=tests")
+
+    rows = grid(result)
+    assert [cells[0] for cells in rows.values()] == [".", "s", "."]
+    assert [cells[1] for cells in rows.values()] == [".", "s", "F"]
+
+
+def test_a_grid_explains_its_characters(mixed):
+    result = mixed.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=sources")
+
+    result.stdout.fnmatch_lines(["*. passed*F failed*E error*s skipped*- not run*"])
+
+
+def test_none_prints_no_summary(mixed):
+    result = mixed.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=none")
+
+    assert not any("= sources =" in line for line in result.outlines)
+
+
+def test_an_unknown_summary_style_is_rejected(pytester):
+    result = pytester.runpytest("--sources-summary=matrix")
+
+    assert result.ret != 0
+    result.stderr.fnmatch_lines(["*invalid choice*"])
+
+
+def test_a_test_missing_from_a_source_reads_as_not_run(pytester):
+    """A source whose worker died mid-item leaves gaps rather than false passes."""
+    for name in ("alice", "bob"):
+        (pytester.path / "submissions" / name).mkdir(parents=True)
+    pytester.makepyfile(
+        """
+        import pytest
+
+        @pytest.mark.sources("submissions/alice")
+        def test_only_alice(source): ...
+
+        def test_both(source): ...
+        """
+    )
+
+    result = pytester.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=sources")
+
+    assert grid(result)["submissions/bob"] == [".", "-"]

@@ -1,11 +1,53 @@
 from collections import Counter
+from enum import StrEnum
 
 import pytest
 
 from pytest_sources._discover import resolve
-from pytest_sources._nodeid import source_of
+from pytest_sources._nodeid import DELIMITER, source_of
 
-COLUMNS = ("passed", "failed", "error", "skipped")
+
+class Summary(StrEnum):
+    """Which view of the results to print after the run."""
+
+    COUNTS = "counts"
+    SOURCES = "sources"
+    TESTS = "tests"
+    NONE = "none"
+
+
+class Outcome(StrEnum):
+    """What a test did, folded from its three phase reports."""
+
+    PASSED = "passed"
+    FAILED = "failed"
+    ERROR = "error"
+    SKIPPED = "skipped"
+
+
+CHARACTERS = {
+    Outcome.PASSED: ".",
+    Outcome.FAILED: "F",
+    Outcome.ERROR: "E",
+    Outcome.SKIPPED: "s",
+}
+MISSING = "-"
+
+
+@pytest.hookimpl
+def pytest_addoption(parser: pytest.Parser) -> None:
+    group = parser.getgroup("sources")
+    group.addoption(
+        "--sources-summary",
+        dest="sources_summary",
+        choices=list(Summary),
+        default=Summary.COUNTS,
+        help=(
+            "Summary printed after the run. counts: a row per source with outcome "
+            "totals. sources: a row per source, a column per test. tests: a row per "
+            "test, a column per source. none: no summary."
+        ),
+    )
 
 
 @pytest.hookimpl
@@ -16,18 +58,21 @@ def pytest_configure(config: pytest.Config) -> None:
     # Nothing ran, so a table of zeroes would only be misleading.
     if config.getoption("collectonly", False):
         return
+    if Summary(config.getoption("sources_summary")) is Summary.NONE:
+        return
     if resolve(config):
         config.pluginmanager.register(SourceSummary(config), "pytest_sources_summary")
 
 
 class SourceSummary:
-    """Tally results per source and print them as a table after the run."""
+    """Record every outcome per source and print one of three views of it."""
 
     def __init__(self, config: pytest.Config) -> None:
-        sources = [source.id for source in resolve(config)]
-        self._source_ids = set(sources)
-        self._tally: dict[str, Counter[str]] = {source: Counter() for source in sources}
-        self._duration: dict[str, float] = dict.fromkeys(sources, 0.0)
+        self._sources = [source.id for source in resolve(config)]
+        self._source_ids = set(self._sources)
+        self._style = Summary(config.getoption("sources_summary"))
+        self._results: dict[str, dict[str, Outcome]] = {source: {} for source in self._sources}
+        self._duration: dict[str, float] = dict.fromkeys(self._sources, 0.0)
 
     @pytest.hookimpl
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
@@ -38,43 +83,98 @@ class SourceSummary:
         self._duration[source] += report.duration
         outcome = _outcome(report)
         if outcome is not None:
-            self._tally[source][outcome] += 1
+            self._results[source][_test_of(report.nodeid, source)] = outcome
 
     @pytest.hookimpl
     def pytest_terminal_summary(self, terminalreporter) -> None:
-        if not self._tally:
+        if not self._results:
             return
 
-        width = max(len("source"), *(len(source) for source in self._tally))
         terminalreporter.write_sep("=", "sources")
-        terminalreporter.write_line(_row("source", COLUMNS, "time", width))
+        if self._style is Summary.COUNTS:
+            self._write_counts(terminalreporter)
+        else:
+            self._write_grid(terminalreporter)
 
-        for source, counts in self._tally.items():
-            values = [str(counts[column]) for column in COLUMNS]
-            duration = f"{self._duration[source]:.2f}s"
-            failed = bool(counts["failed"] or counts["error"])
+    def _write_counts(self, terminalreporter) -> None:
+        width = max(len("source"), *(len(source) for source in self._sources))
+        terminalreporter.write_line(_counts_row("source", list(Outcome), "time", width))
+
+        for source in self._sources:
+            tally = Counter(self._results[source].values())
+            values = [str(tally[outcome]) for outcome in Outcome]
+            failed = bool(tally[Outcome.FAILED] or tally[Outcome.ERROR])
             terminalreporter.write_line(
-                _row(source, values, duration, width), red=failed, green=not failed
+                _counts_row(source, values, f"{self._duration[source]:.2f}s", width),
+                red=failed,
+                green=not failed,
             )
 
+    def _write_grid(self, terminalreporter) -> None:
+        tests = sorted({test for results in self._results.values() for test in results})
 
-def _row(source: str, values, duration: str, width: int) -> str:
-    counts = "  ".join(
-        f"{value:>{len(column)}}" for value, column in zip(values, COLUMNS, strict=True)
-    )
+        if self._style is Summary.SOURCES:
+            corner, rows, columns = "source", self._sources, tests
+        else:
+            corner, rows, columns = "test", tests, self._sources
+
+        def cell(row: str, column: str) -> str:
+            source, test = (row, column) if self._style is Summary.SOURCES else (column, row)
+            outcome = self._results[source].get(test)
+            return CHARACTERS[outcome] if outcome else MISSING
+
+        # Only the headings are shortened. A row has the width to spare, and a
+        # source id abbreviated in the left column is the one a grader records.
+        headings = [_shorten(columns)[column] for column in columns]
+        width = max(len(corner), *(len(row) for row in rows))
+        widths = [max(len(heading), 1) for heading in headings]
+
+        terminalreporter.write_line(_grid_row(corner, headings, width, widths))
+        for row in rows:
+            cells = [cell(row, column) for column in columns]
+            terminalreporter.write_line(_grid_row(row, cells, width, widths))
+
+        legend = "  ".join(f"{character} {outcome}" for outcome, character in CHARACTERS.items())
+        terminalreporter.write_line(f"{legend}  {MISSING} not run")
+
+
+def _counts_row(source: str, values, duration: str, width: int) -> str:
+    counts = "  ".join(f"{value:>{len(outcome)}}" for value, outcome in zip(values, Outcome, strict=True))
     return f"{source:<{width}}  {counts}  {duration:>7}"
 
 
-def _outcome(report: pytest.TestReport) -> str | None:
-    """Fold a phase report into one of the columns, or nothing.
+def _grid_row(label: str, cells, width: int, widths) -> str:
+    body = "  ".join(f"{cell:>{size}}" for cell, size in zip(cells, widths, strict=True))
+    return f"{label:<{width}}  {body}"
+
+
+def _shorten(labels) -> dict[str, str]:
+    """Drop the leading path from each label, unless that would merge two of them."""
+    short = {label: label.rsplit("/", 1)[-1].rsplit("::", 1)[-1] for label in labels}
+    if len(set(short.values())) < len(short):
+        return {label: label for label in labels}
+    return short
+
+
+def _test_of(nodeid: str, source: str) -> str:
+    """The nodeid with its source taken out, so one test lines up across sources."""
+    head, bracket, params = nodeid.partition("[")
+    if not bracket:
+        return head
+    rest = params.removesuffix("]").removeprefix(source).removeprefix(DELIMITER)
+    return f"{head}[{rest}]" if rest else head
+
+
+def _outcome(report: pytest.TestReport) -> Outcome | None:
+    """Fold a phase report into one outcome, or nothing.
 
     A test reports three times. Only the call decides pass or fail; a setup or
     teardown that blows up is an error, and a skip is usually raised in setup.
     """
     if report.when == "call":
-        return report.outcome
+        return Outcome(report.outcome)
     if report.failed:
-        return "error"
+        return Outcome.ERROR
     if report.when == "setup" and report.skipped:
-        return "skipped"
+        return Outcome.SKIPPED
     return None
