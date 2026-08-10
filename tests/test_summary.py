@@ -162,3 +162,57 @@ def test_a_test_missing_from_a_source_reads_as_not_run(pytester):
     result = pytester.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=sources")
 
     assert grid(result)["submissions/bob"] == [".", "-"]
+
+
+def test_xfail_and_xpass_are_counted_apart_from_pass_and_skip(pytester):
+    """An xpass means the source did better than the test expected, which a
+    plain "passed" would hide."""
+    (pytester.path / "submissions" / "alice").mkdir(parents=True)
+    pytester.makepyfile(
+        """
+        import pytest
+
+        @pytest.mark.xfail(reason="known")
+        def test_expected_failure(source):
+            assert False
+
+        @pytest.mark.xfail(reason="known")
+        def test_unexpected_pass(source):
+            assert True
+        """
+    )
+
+    result = pytester.runpytest("--sources", "submissions/*", "-n", "0")
+
+    # passed failed error skipped xfailed xpassed
+    assert rows(result)["submissions/alice"] == ["0", "0", "0", "0"]
+    assert section(result)[0].split()[1:] == [
+        "passed",
+        "failed",
+        "error",
+        "skipped",
+        "xfailed",
+        "xpassed",
+        "time",
+    ]
+
+
+def test_the_grid_marks_xfail_and_xpass_as_pytest_does(pytester):
+    (pytester.path / "submissions" / "alice").mkdir(parents=True)
+    pytester.makepyfile(
+        """
+        import pytest
+
+        @pytest.mark.xfail(reason="known")
+        def test_expected_failure(source):
+            assert False
+
+        @pytest.mark.xfail(reason="known")
+        def test_unexpected_pass(source):
+            assert True
+        """
+    )
+
+    result = pytester.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=sources")
+
+    assert grid(result)["submissions/alice"] == ["x", "X"]
