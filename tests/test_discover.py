@@ -2,7 +2,8 @@ import re
 
 import pytest
 
-from pytest_sources._discover import discover
+from pytest_sources._discover import discover, resolve
+from pytest_sources._stash import SOURCES
 
 
 @pytest.fixture
@@ -104,3 +105,74 @@ def test_pattern_matching_only_files_is_a_usage_error(tree):
 def test_one_bad_pattern_fails_the_whole_expansion(tree):
     with pytest.raises(pytest.UsageError):
         discover(["submissions/*", "nope/*"], tree)
+
+
+@pytest.fixture
+def submission_dirs(pytester):
+    for name in ("alice", "bob"):
+        (pytester.path / "submissions" / name).mkdir(parents=True)
+    return pytester
+
+
+def test_resolve_returns_the_sources_named_by_the_option(submission_dirs):
+    config = submission_dirs.parseconfig("--sources", "submissions/*")
+
+    assert [source.id for source in resolve(config)] == [
+        "submissions/alice",
+        "submissions/bob",
+    ]
+
+
+def test_resolve_reads_the_ini_when_the_option_is_absent(submission_dirs):
+    submission_dirs.makeini("[pytest]\nsources = submissions/*\n")
+    config = submission_dirs.parseconfig()
+
+    assert [source.id for source in resolve(config)] == [
+        "submissions/alice",
+        "submissions/bob",
+    ]
+
+
+def test_resolve_prefers_the_option_over_the_ini(submission_dirs):
+    submission_dirs.makeini("[pytest]\nsources = submissions/*\n")
+    config = submission_dirs.parseconfig("--sources", "submissions/alice")
+
+    assert [source.id for source in resolve(config)] == ["submissions/alice"]
+
+
+def test_resolve_yields_nothing_when_no_sources_are_configured(pytester):
+    config = pytester.parseconfig()
+
+    assert resolve(config) == []
+    assert SOURCES not in config.stash
+
+
+def test_resolve_stashes_what_it_found(submission_dirs):
+    config = submission_dirs.parseconfig("--sources", "submissions/*")
+    sources = resolve(config)
+
+    assert config.stash[SOURCES] == sources
+
+
+def test_resolve_expands_the_globs_only_once(submission_dirs, monkeypatch):
+    """The result is cached because _workers and loadsource both ask for it.
+
+    Without the cache the globs would be expanded again for every caller, and a
+    source appearing mid-run would give two callers different answers.
+    """
+    config = submission_dirs.parseconfig("--sources", "submissions/*")
+    first = resolve(config)
+
+    monkeypatch.setattr(
+        "pytest_sources._discover.discover",
+        lambda *args: pytest.fail("discover called a second time"),
+    )
+
+    assert resolve(config) is first
+
+
+def test_resolve_returns_the_stashed_list_untouched(submission_dirs):
+    config = submission_dirs.parseconfig("--sources", "submissions/*")
+    config.stash[SOURCES] = []
+
+    assert resolve(config) == []
