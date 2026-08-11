@@ -4,7 +4,7 @@ from enum import StrEnum
 import pytest
 
 from pytest_sources._discover import resolve
-from pytest_sources._nodeid import DELIMITER, source_of
+from pytest_sources._nodeid import delimiter, source_of
 
 
 class Summary(StrEnum):
@@ -165,7 +165,7 @@ def _test_of(nodeid: str, source: str) -> str:
     head, bracket, params = nodeid.partition("[")
     if not bracket:
         return head
-    rest = params.removesuffix("]").removeprefix(source).removeprefix(DELIMITER)
+    rest = params.removesuffix("]").removeprefix(source).removeprefix(delimiter())
     return f"{head}[{rest}]" if rest else head
 
 

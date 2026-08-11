@@ -4,7 +4,7 @@ import pytest
 
 from pytest_sources import source as source_module
 from pytest_sources._discover import discover, resolve
-from pytest_sources._nodeid import DELIMITER
+from pytest_sources._nodeid import DEFAULT
 from pytest_sources._stash import SOURCES
 
 
@@ -96,13 +96,13 @@ class TestSourcesOption:
         result.stdout.fnmatch_lines(["@pytest.mark.sources*", "@pytest.mark.no_sources*"])
 
     def test_a_source_containing_the_delimiter_is_rejected(self, pytester):
-        (pytester.path / "submissions" / f"a{DELIMITER}b").mkdir(parents=True)
+        (pytester.path / "submissions" / f"a{DEFAULT}b").mkdir(parents=True)
 
         with pytest.raises(pytest.UsageError, match="may not appear in a source path"):
             pytester.parseconfigure("--sources", "submissions/*")
 
     def test_the_sources_marker_rejects_the_delimiter_too(self, pytester):
-        (pytester.path / "submissions" / f"a{DELIMITER}b").mkdir(parents=True)
+        (pytester.path / "submissions" / f"a{DEFAULT}b").mkdir(parents=True)
         pytester.makepyfile(
             """
             import pytest

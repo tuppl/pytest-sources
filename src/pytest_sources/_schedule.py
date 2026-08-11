@@ -8,7 +8,7 @@ from xdist.scheduler.loadscope import LoadScopeScheduling
 from xdist.workermanage import WorkerController
 
 from pytest_sources._discover import resolve
-from pytest_sources._nodeid import DELIMITER, source_of
+from pytest_sources._nodeid import delimiter, source_of
 from pytest_sources._stash import SOURCES
 
 
@@ -86,7 +86,7 @@ class SourceScheduling(LoadScopeScheduling):
             chunks = min(max(1, self.numnodes // len(sources)), len(nodeids)) if splittable else 1
             size = math.ceil(len(nodeids) / chunks)
             for position, nodeid in enumerate(nodeids):
-                scopes[nodeid] = f"{source_id}{DELIMITER}{position // size}"
+                scopes[nodeid] = f"{source_id}{delimiter()}{position // size}"
         return scopes
 
 

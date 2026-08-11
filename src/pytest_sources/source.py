@@ -82,12 +82,13 @@ def make_sources(paths: Sequence[Path], root: Path) -> list[Source]:
 
 def _validate(sources: Sequence[Source]) -> None:
     """Reject ids that a nodeid could not be traced back to a single source."""
-    from pytest_sources._nodeid import DELIMITER
+    from pytest_sources._nodeid import delimiter
 
-    reserved = [source.id for source in sources if DELIMITER in source.id]
+    separator = delimiter()
+    reserved = [source.id for source in sources if separator in source.id]
     if reserved:
         raise pytest.UsageError(
-            f"{DELIMITER!r} separates parameters in a test id and may not appear "
+            f"{separator!r} separates parameters in a test id and may not appear "
             f"in a source path: {', '.join(reserved)}"
         )
 
