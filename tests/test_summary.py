@@ -36,6 +36,12 @@ def section(result):
     return body
 
 
+def grid(result):
+    """The grid body, keyed by row label, header and legend removed."""
+    body = section(result)[1:-1]
+    return {line.split()[0]: line.split()[1:] for line in body}
+
+
 def rows(result):
     """The counts body, keyed by source: passed, failed, error, skipped."""
     return {
@@ -44,175 +50,171 @@ def rows(result):
     }
 
 
-def test_reports_a_row_for_each_source(mixed):
-    result = mixed.runpytest("--sources", "submissions/*", "-n", "0")
+class TestCounts:
+    """The default view, one row of totals per source."""
 
-    assert rows(result) == {
-        "submissions/alice": ["2", "0", "0", "1"],
-        "submissions/bob": ["1", "1", "0", "1"],
-    }
+    def test_reports_a_row_for_each_source(self, mixed):
+        result = mixed.runpytest("--sources", "submissions/*", "-n", "0")
 
+        assert rows(result) == {
+            "submissions/alice": ["2", "0", "0", "1"],
+            "submissions/bob": ["1", "1", "0", "1"],
+        }
 
-def test_each_row_ends_with_a_duration(mixed):
-    result = mixed.runpytest("--sources", "submissions/*", "-n", "0")
+    def test_each_row_ends_with_a_duration(self, mixed):
+        result = mixed.runpytest("--sources", "submissions/*", "-n", "0")
 
-    durations = [line.split()[-1] for line in result.outlines if line.startswith("submissions/")]
-    assert durations and all(value.endswith("s") for value in durations)
+        durations = [line.split()[-1] for line in result.outlines if line.startswith("submissions/")]
+        assert durations and all(value.endswith("s") for value in durations)
 
+    def test_a_source_with_no_tests_still_gets_a_row(self, mixed):
+        """A source whose tests were all deselected, or whose worker died, reads zero."""
+        result = mixed.runpytest("--sources", "submissions/*", "-n", "0", "-k", "alice")
 
-def test_counts_setup_failures_as_errors(pytester):
-    (pytester.path / "submissions" / "alice").mkdir(parents=True)
-    pytester.makepyfile(
-        """
-        import pytest
+        assert rows(result)["submissions/bob"] == ["0", "0", "0", "0"]
 
-        @pytest.fixture
-        def broken():
-            raise RuntimeError("boom")
+    def test_the_totals_are_the_same_under_xdist(self, mixed):
+        """Reports reach the controller either way, so distribution cannot change them."""
+        serial = rows(mixed.runpytest("--sources", "submissions/*", "-n", "0"))
+        distributed = rows(mixed.runpytest("--sources", "submissions/*", "-n", "2"))
 
-        def test_x(source, broken): ...
-        """
-    )
-
-    result = pytester.runpytest("--sources", "submissions/*", "-n", "0")
-
-    assert rows(result)["submissions/alice"] == ["0", "0", "1", "0"]
+        assert serial == distributed
 
 
-def test_the_table_is_absent_without_sources(pytester):
-    pytester.makepyfile("def test_x(): ...")
+class TestGrids:
+    """A cell per source and test, either way round."""
 
-    result = pytester.runpytest()
+    def test_sources_grid_puts_a_source_on_each_row(self, mixed):
+        result = mixed.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=sources")
 
-    assert "sources" not in "".join(line for line in result.outlines if line.startswith("="))
+        assert grid(result) == {
+            "submissions/alice": [".", "s", "."],
+            "submissions/bob": [".", "s", "F"],
+        }
 
+    def test_tests_grid_is_the_transpose(self, mixed):
+        result = mixed.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=tests")
 
-def test_a_source_with_no_tests_still_gets_a_row(mixed):
-    """A source whose tests were all deselected, or whose worker died, reads zero."""
-    result = mixed.runpytest("--sources", "submissions/*", "-n", "0", "-k", "alice")
+        rows = grid(result)
+        assert [cells[0] for cells in rows.values()] == [".", "s", "."]
+        assert [cells[1] for cells in rows.values()] == [".", "s", "F"]
 
-    assert rows(result)["submissions/bob"] == ["0", "0", "0", "0"]
+    def test_a_grid_explains_its_characters(self, mixed):
+        result = mixed.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=sources")
 
+        result.stdout.fnmatch_lines(["*. passed*F failed*E error*s skipped*- not run*"])
 
-def test_the_totals_are_the_same_under_xdist(mixed):
-    """Reports reach the controller either way, so distribution cannot change them."""
-    serial = rows(mixed.runpytest("--sources", "submissions/*", "-n", "0"))
-    distributed = rows(mixed.runpytest("--sources", "submissions/*", "-n", "2"))
+    def test_a_test_missing_from_a_source_reads_as_not_run(self, pytester):
+        """A source whose worker died mid-item leaves gaps rather than false passes."""
+        for name in ("alice", "bob"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile(
+            """
+            import pytest
 
-    assert serial == distributed
+            @pytest.mark.sources("submissions/alice")
+            def test_only_alice(source): ...
 
+            def test_both(source): ...
+            """
+        )
 
-def grid(result):
-    """The grid body, keyed by row label, header and legend removed."""
-    body = section(result)[1:-1]
-    return {line.split()[0]: line.split()[1:] for line in body}
+        result = pytester.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=sources")
 
+        assert grid(result)["submissions/bob"] == [".", "-"]
 
-def test_sources_grid_puts_a_source_on_each_row(mixed):
-    result = mixed.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=sources")
+    def test_the_grid_marks_xfail_and_xpass_as_pytest_does(self, pytester):
+        (pytester.path / "submissions" / "alice").mkdir(parents=True)
+        pytester.makepyfile(
+            """
+            import pytest
 
-    assert grid(result) == {
-        "submissions/alice": [".", "s", "."],
-        "submissions/bob": [".", "s", "F"],
-    }
+            @pytest.mark.xfail(reason="known")
+            def test_expected_failure(source):
+                assert False
 
+            @pytest.mark.xfail(reason="known")
+            def test_unexpected_pass(source):
+                assert True
+            """
+        )
 
-def test_tests_grid_is_the_transpose(mixed):
-    result = mixed.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=tests")
+        result = pytester.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=sources")
 
-    rows = grid(result)
-    assert [cells[0] for cells in rows.values()] == [".", "s", "."]
-    assert [cells[1] for cells in rows.values()] == [".", "s", "F"]
-
-
-def test_a_grid_explains_its_characters(mixed):
-    result = mixed.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=sources")
-
-    result.stdout.fnmatch_lines(["*. passed*F failed*E error*s skipped*- not run*"])
-
-
-def test_none_prints_no_summary(mixed):
-    result = mixed.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=none")
-
-    assert not any("= sources =" in line for line in result.outlines)
-
-
-def test_an_unknown_summary_style_is_rejected(pytester):
-    result = pytester.runpytest("--sources-summary=matrix")
-
-    assert result.ret != 0
-    result.stderr.fnmatch_lines(["*invalid choice*"])
+        assert grid(result)["submissions/alice"] == ["x", "X"]
 
 
-def test_a_test_missing_from_a_source_reads_as_not_run(pytester):
-    """A source whose worker died mid-item leaves gaps rather than false passes."""
-    for name in ("alice", "bob"):
-        (pytester.path / "submissions" / name).mkdir(parents=True)
-    pytester.makepyfile(
-        """
-        import pytest
+class TestOutcomes:
+    """Folding a test's three phase reports into one result."""
 
-        @pytest.mark.sources("submissions/alice")
-        def test_only_alice(source): ...
+    def test_counts_setup_failures_as_errors(self, pytester):
+        (pytester.path / "submissions" / "alice").mkdir(parents=True)
+        pytester.makepyfile(
+            """
+            import pytest
 
-        def test_both(source): ...
-        """
-    )
+            @pytest.fixture
+            def broken():
+                raise RuntimeError("boom")
 
-    result = pytester.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=sources")
+            def test_x(source, broken): ...
+            """
+        )
 
-    assert grid(result)["submissions/bob"] == [".", "-"]
+        result = pytester.runpytest("--sources", "submissions/*", "-n", "0")
+
+        assert rows(result)["submissions/alice"] == ["0", "0", "1", "0"]
+
+    def test_xfail_and_xpass_are_counted_apart_from_pass_and_skip(self, pytester):
+        """An xpass means the source did better than the test expected, which a
+        plain "passed" would hide."""
+        (pytester.path / "submissions" / "alice").mkdir(parents=True)
+        pytester.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.xfail(reason="known")
+            def test_expected_failure(source):
+                assert False
+
+            @pytest.mark.xfail(reason="known")
+            def test_unexpected_pass(source):
+                assert True
+            """
+        )
+
+        result = pytester.runpytest("--sources", "submissions/*", "-n", "0")
+
+        # passed failed error skipped xfailed xpassed
+        assert rows(result)["submissions/alice"] == ["0", "0", "0", "0"]
+        assert section(result)[0].split()[1:] == [
+            "passed",
+            "failed",
+            "error",
+            "skipped",
+            "xfailed",
+            "xpassed",
+            "time",
+        ]
 
 
-def test_xfail_and_xpass_are_counted_apart_from_pass_and_skip(pytester):
-    """An xpass means the source did better than the test expected, which a
-    plain "passed" would hide."""
-    (pytester.path / "submissions" / "alice").mkdir(parents=True)
-    pytester.makepyfile(
-        """
-        import pytest
+class TestSummaryOption:
+    """Choosing the view, or none at all."""
 
-        @pytest.mark.xfail(reason="known")
-        def test_expected_failure(source):
-            assert False
+    def test_the_table_is_absent_without_sources(self, pytester):
+        pytester.makepyfile("def test_x(): ...")
 
-        @pytest.mark.xfail(reason="known")
-        def test_unexpected_pass(source):
-            assert True
-        """
-    )
+        result = pytester.runpytest()
 
-    result = pytester.runpytest("--sources", "submissions/*", "-n", "0")
+        assert "sources" not in "".join(line for line in result.outlines if line.startswith("="))
 
-    # passed failed error skipped xfailed xpassed
-    assert rows(result)["submissions/alice"] == ["0", "0", "0", "0"]
-    assert section(result)[0].split()[1:] == [
-        "passed",
-        "failed",
-        "error",
-        "skipped",
-        "xfailed",
-        "xpassed",
-        "time",
-    ]
+    def test_none_prints_no_summary(self, mixed):
+        result = mixed.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=none")
 
+        assert not any("= sources =" in line for line in result.outlines)
 
-def test_the_grid_marks_xfail_and_xpass_as_pytest_does(pytester):
-    (pytester.path / "submissions" / "alice").mkdir(parents=True)
-    pytester.makepyfile(
-        """
-        import pytest
+    def test_an_unknown_summary_style_is_rejected(self, pytester):
+        result = pytester.runpytest("--sources-summary=matrix")
 
-        @pytest.mark.xfail(reason="known")
-        def test_expected_failure(source):
-            assert False
-
-        @pytest.mark.xfail(reason="known")
-        def test_unexpected_pass(source):
-            assert True
-        """
-    )
-
-    result = pytester.runpytest("--sources", "submissions/*", "-n", "0", "--sources-summary=sources")
-
-    assert grid(result)["submissions/alice"] == ["x", "X"]
+        assert result.ret != 0
+        result.stderr.fnmatch_lines(["*invalid choice*"])
