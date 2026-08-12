@@ -15,6 +15,28 @@ def worker_assignments(result):
     return assignments
 
 
+def worker_scopes(result):
+    """Map each worker id to the set of (scope, source) pairs it ran tests for.
+
+    The scope is the nodeid up to the last "::", so it is the file for a plain
+    function and the file plus class for a method.
+    """
+    scopes = {}
+    for line in result.outlines:
+        if "[gw" not in line or "PASSED" not in line:
+            continue
+        worker = line[line.index("[gw") + 1 : line.index("]")]
+        nodeid = line.rsplit("PASSED ", 1)[-1].strip()
+        source = nodeid[nodeid.rindex("[") + 1 : nodeid.rindex("]")].split("+")[0]
+        scopes.setdefault(worker, set()).add((nodeid.rsplit("::", 1)[0], source))
+    return scopes
+
+
+def read_pids(directory):
+    """Map each pid file written by a test back to its contents."""
+    return {path.name: path.read_text() for path in directory.iterdir()}
+
+
 class TestWorkerAssignment:
     """Which worker each source's tests are given to."""
 
@@ -155,3 +177,160 @@ class TestProcessIsolation:
 
         result.assert_outcomes(passed=2, failed=1)
         result.stdout.fnmatch_lines(["*crashed while running*submissions/alice*"])
+
+
+class TestDistComposition:
+    """An explicit --dist groups within a source instead of replacing the source."""
+
+    def test_loadfile_keeps_a_file_whole_inside_a_source(self, pytester):
+        """Six work items from three sources and two files, none of them shared.
+
+        Chunking is what would otherwise cut a file in half here, since six workers
+        over three sources is two chunks each.
+        """
+        for name in ("alice", "bob", "carol"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile(
+            test_alpha="def test_a(source): pass\ndef test_b(source): pass\n",
+            test_beta="def test_c(source): pass\ndef test_d(source): pass\n",
+        )
+
+        result = pytester.runpytest("--sources", "submissions/*", "--dist", "loadfile", "-n", "6", "-v")
+
+        result.assert_outcomes(passed=12)
+        scopes = worker_scopes(result)
+        assert len(scopes) == 6
+        assert all(len(pairs) == 1 for pairs in scopes.values())
+        assert {pair for pairs in scopes.values() for pair in pairs} == {
+            (file, f"submissions/{name}")
+            for file in ("test_alpha.py", "test_beta.py")
+            for name in ("alice", "bob", "carol")
+        }
+
+    def test_loadscope_keeps_a_class_whole_inside_a_source(self, pytester):
+        """The classes are interleaved so chunking alone would cut TestOne in half."""
+        for name in ("alice", "bob"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile(
+            test_scoped="""
+            class TestOne:
+                def test_a(self, source): pass
+
+            class TestTwo:
+                def test_c(self, source): pass
+
+            class TestOneAgain:
+                def test_b(self, source): pass
+            """
+        )
+
+        result = pytester.runpytest("--sources", "submissions/*", "--dist", "loadscope", "-n", "4", "-v")
+
+        result.assert_outcomes(passed=6)
+        scopes = worker_scopes(result)
+        assert all(len(pairs) == 1 for pairs in scopes.values())
+        assert {pair for pairs in scopes.values() for pair in pairs} == {
+            (f"test_scoped.py::{klass}", f"submissions/{name}")
+            for klass in ("TestOne", "TestTwo", "TestOneAgain")
+            for name in ("alice", "bob")
+        }
+
+    def test_load_is_chunked_like_the_default(self, submissions):
+        """--dist load names no grouping, so chunking stays the answer."""
+        result = submissions.runpytest("--sources", "submissions/*", "--dist", "load", "-n", "6", "-v")
+
+        result.assert_outcomes(passed=6)
+        assignments = worker_assignments(result)
+        assert len(assignments) == 6
+        assert all(len(sources) == 1 for sources in assignments.values())
+
+    def test_an_unfanned_test_still_runs_under_a_grouping_mode(self, pytester):
+        """It belongs to no source, so its scope is the mode's key alone."""
+        for name in ("alice", "bob"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile(
+            test_alpha="def test_a(source): pass",
+            test_helper="""
+            import pytest
+
+            @pytest.mark.no_sources
+            def test_helper(): pass
+            """,
+        )
+
+        result = pytester.runpytest("--sources", "submissions/*", "--dist", "loadfile", "-n", "3")
+
+        result.assert_outcomes(passed=3)
+
+
+class TestLoadGroup:
+    """--dist loadgroup, where only the marked tests are given a key."""
+
+    @pytest.fixture
+    def grouped(self, pytester, tmp_path, monkeypatch):
+        """Two sources, two tests sharing a group and two carrying none.
+
+        The group is interleaved with the ungrouped tests on purpose. Chunking
+        slices a source in collection order, so at four workers the two marked
+        tests fall either side of a chunk boundary and only the group key can
+        bring them back together.
+        """
+        monkeypatch.setenv("PIDDIR", str(tmp_path))
+        for name in ("alice", "bob"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile(
+            """
+            import os, pathlib
+            import pytest
+
+            def record(source, label):
+                pathlib.Path(os.environ["PIDDIR"], f"{source.name}-{label}").write_text(str(os.getpid()))
+
+            @pytest.mark.xdist_group("db")
+            def test_grouped_one(source): record(source, "grouped_one")
+
+            def test_plain_one(source): record(source, "plain_one")
+
+            @pytest.mark.xdist_group("db")
+            def test_grouped_two(source): record(source, "grouped_two")
+
+            def test_plain_two(source): record(source, "plain_two")
+            """
+        )
+        return pytester
+
+    def test_a_group_shares_a_process_within_a_source(self, grouped, tmp_path):
+        result = grouped.runpytest("--sources", "submissions/*", "--dist", "loadgroup", "-n", "4")
+        result.assert_outcomes(passed=8)
+
+        pids = read_pids(tmp_path)
+        for name in ("alice", "bob"):
+            assert pids[f"{name}-grouped_one"] == pids[f"{name}-grouped_two"]
+
+    def test_a_group_never_spans_two_sources(self, grouped, tmp_path):
+        """The source is still a prefix of the scope, so the guarantee survives."""
+        result = grouped.runpytest("--sources", "submissions/*", "--dist", "loadgroup", "-n", "4")
+        result.assert_outcomes(passed=8)
+
+        pids = read_pids(tmp_path)
+        assert pids["alice-grouped_one"] != pids["bob-grouped_one"]
+
+    def test_ungrouped_tests_are_chunked_rather_than_given_a_process_each(self, grouped, tmp_path):
+        """loadgroup keys the marked tests only; taking it literally costs a process per test.
+
+        Two sources give four work items, a group and a chunk each, not six.
+        """
+        result = grouped.runpytest("--sources", "submissions/*", "--dist", "loadgroup", "-n", "2")
+        result.assert_outcomes(passed=8)
+
+        pids = read_pids(tmp_path)
+        for name in ("alice", "bob"):
+            assert pids[f"{name}-plain_one"] == pids[f"{name}-plain_two"]
+            assert pids[f"{name}-plain_one"] != pids[f"{name}-grouped_one"]
+        assert len(set(pids.values())) == 4
+
+    def test_the_summary_still_recognises_a_grouped_test(self, grouped):
+        """The @group suffix xdist appends used to make source_of read them as unfanned."""
+        result = grouped.runpytest("--sources", "submissions/*", "--dist", "loadgroup", "-n", "2")
+
+        result.stdout.fnmatch_lines(["submissions/alice*4*0*0*"])

@@ -230,6 +230,18 @@ class TestSourceOf:
     def test_ignores_brackets_in_the_file_path(self):
         assert source_of("dir[1]/t.py::test_x[submissions/alice]", SOURCE_IDS) == "submissions/alice"
 
+    def test_ignores_the_group_xdist_appends_under_loadgroup(self):
+        assert source_of("t.py::test_x[submissions/alice]@db", SOURCE_IDS) == "submissions/alice"
+
+    def test_ignores_the_group_on_an_unfanned_test(self):
+        assert source_of("t.py::test_x@db", SOURCE_IDS) == UNFANNED
+
+    def test_ignores_a_group_name_containing_an_at_sign(self):
+        assert source_of("t.py::test_x[submissions/alice]@a@b", SOURCE_IDS) == "submissions/alice"
+
+    def test_keeps_a_source_containing_an_at_sign(self):
+        assert source_of("t.py::test_x[submissions/al@ce]", SOURCE_IDS | {"submissions/al@ce"}) == "submissions/al@ce"
+
 
 class TestDelimiterOption:
     """Choosing the character that separates parameters in a test id."""
