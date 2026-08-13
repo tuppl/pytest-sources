@@ -1,14 +1,35 @@
 [project]
 name = "pytest-sources"
 version = "0.1.0"
-description = "pytest plugin for running tests on multiple different source code"
+description = "pytest plugin for running tests on multiple sources"
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [{ name = "Dan Nguyen", email = "dan@tuppl.dev" }]
-dependencies = [
-  "pytest>=9.1.1",
-  "pytest-xdist>=3.8.0",
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["pytest", "plugin", "xdist", "grading", "autograding", "sources"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Framework :: Pytest",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Education",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Education :: Testing",
+  "Topic :: Software Development :: Testing",
+  "Typing :: Typed",
 ]
+dependencies = [
+  "pytest>=9.1.1,<10",
+  "pytest-xdist>=3.8.0,<4",
+]
+
+[project.urls]
+Homepage = "https://github.com/tuppl/pytest-sources"
+Repository = "https://github.com/tuppl/pytest-sources"
+Issues = "https://github.com/tuppl/pytest-sources/issues"
 
 [project.entry-points.pytest11]
 sources = "pytest_sources.plugin"
