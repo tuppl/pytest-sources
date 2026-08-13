@@ -1,5 +1,9 @@
 # pytest-sources
 
+[![PyPI](https://img.shields.io/pypi/v/pytest-sources)](https://pypi.org/project/pytest-sources/)
+[![Python](https://img.shields.io/pypi/pyversions/pytest-sources)](https://pypi.org/project/pytest-sources/)
+[![Tests](https://github.com/tuppl/pytest-sources/actions/workflows/ci.yml/badge.svg)](https://github.com/tuppl/pytest-sources/actions/workflows/ci.yml)
+
 pytest-sources is a plugin for pytest that allows tests to be run on multiple sources.
 
 This is handy for autograding coursework, take-home interview screening, and conformance suites across implementation variations.
