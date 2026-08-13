@@ -88,7 +88,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "pytest", specifier = ">=8.0,<10" },
     { name = "pytest-xdist", specifier = ">=3.8.0,<4" },
 ]
 
