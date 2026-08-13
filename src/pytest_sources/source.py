@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import importlib
 import os
@@ -15,7 +17,12 @@ class SourceImportError(ImportError):
     """A source does not provide the requested module."""
 
 
-_active: "Source | None" = None
+_active: Source | None = None
+
+
+def active() -> Source | None:
+    """The source currently on sys.path, if any."""
+    return _active
 
 
 @dataclass(frozen=True)
