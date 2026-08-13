@@ -1,7 +1,7 @@
 import pytest
 from _pytest.python import FunctionDefinition
 
-from pytest_sources._discover import discover
+from pytest_sources._discover import discover, resolve
 from pytest_sources._stash import MARKER_SOURCES, SOURCES
 from pytest_sources.source import Source, active, make_sources
 
@@ -74,5 +74,28 @@ def _sources_for(definition: FunctionDefinition, config: pytest.Config) -> list[
 def _marker_sources(globs: tuple[str, ...], config: pytest.Config) -> list[Source]:
     cache = config.stash.setdefault(MARKER_SOURCES, {})
     if globs not in cache:
-        cache[globs] = make_sources(discover(globs, config.rootpath), config.rootpath)
+        cache[globs] = _narrow(globs, config)
     return cache[globs]
+
+
+def _narrow(globs: tuple[str, ...], config: pytest.Config) -> list[Source]:
+    """
+    Select the run's sources that the marker's globs match.
+    """
+    matched = make_sources(discover(globs, config.rootpath), config.rootpath)
+    declared = resolve(config)
+    # Nothing declared, so the markers are the whole run and there is no set to
+    # narrow. Every source shares a process, as under -n 0.
+    if not declared:
+        return matched
+
+    paths = {source.path for source in declared}
+    undeclared = sorted(source.id for source in matched if source.path not in paths)
+    if undeclared:
+        raise pytest.UsageError(
+            f"sources marker matched sources that --sources did not: {', '.join(undeclared)}. "
+            f"Add them to --sources, or narrow the marker."
+        )
+
+    matched_paths = {source.path for source in matched}
+    return [source for source in declared if source.path in matched_paths]

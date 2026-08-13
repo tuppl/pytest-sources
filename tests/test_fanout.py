@@ -139,6 +139,92 @@ class TestSourceActivation:
         result.assert_outcomes(passed=1)
 
 
+class TestSourcesMarkerNarrows:
+    """
+    The marker selects from the run's sources rather than adding to them.
+    """
+
+    def test_a_source_the_run_did_not_declare_is_refused(self, pytester):
+        for name in ("alice", "carol_alt"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.sources("submissions/*_alt")
+            def test_x(source): ...
+            """
+        )
+
+        result = pytester.runpytest("--sources", "submissions/alice", "-n", "0")
+
+        assert result.ret != 0
+        result.stdout.fnmatch_lines(["*--sources did not: submissions/carol_alt*"])
+
+    def test_the_message_names_every_undeclared_source(self, pytester):
+        for name in ("alice", "carol_alt", "dave_alt"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.sources("submissions/*_alt")
+            def test_x(source): ...
+            """
+        )
+
+        result = pytester.runpytest("--sources", "submissions/alice", "-n", "0")
+
+        result.stdout.fnmatch_lines(["*submissions/carol_alt, submissions/dave_alt*"])
+
+    def test_a_declared_subset_is_allowed(self, submissions):
+        submissions.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.sources("submissions/alice")
+            def test_x(source): ...
+            """
+        )
+        result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
+        result.assert_outcomes(passed=1)
+
+    def test_a_narrowed_source_keeps_its_summary_row(self, submissions):
+        """The point of narrowing: the marker's source is one the summary knows."""
+        submissions.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.sources("submissions/alice")
+            def test_x(source): ...
+            """
+        )
+
+        result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
+
+        result.stdout.fnmatch_lines(["submissions/alice*1*0*0*"])
+
+    def test_each_narrowed_source_still_gets_its_own_process(self, pytester, tmp_path, monkeypatch):
+        monkeypatch.setenv("PIDDIR", str(tmp_path))
+        for name in ("alice_alt", "bob_alt", "carol"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile(
+            """
+            import os, pathlib
+            import pytest
+
+            @pytest.mark.sources("submissions/*_alt")
+            def test_x(source):
+                pathlib.Path(os.environ["PIDDIR"], source.name).write_text(str(os.getpid()))
+            """
+        )
+
+        result = pytester.runpytest("--sources", "submissions/*", "-n", "2")
+
+        result.assert_outcomes(passed=2)
+        assert len({path.read_text() for path in tmp_path.iterdir()}) == 2
+
+
 class TestSourcesMarker:
     """Naming a test's sources instead of taking the run's."""
 
