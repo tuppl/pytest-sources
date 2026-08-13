@@ -36,6 +36,45 @@ def cwd_probe(pytester, tmp_path, monkeypatch):
     return pytester, tmp_path
 
 
+@pytest.fixture
+def read_probe(pytester, tmp_path, monkeypatch):
+    """A data.txt in each source and another beside the test suite, all different.
+
+    The name is deliberately the same in both places, so what a relative open
+    returns names where it looked rather than what it happened to find.
+    """
+    monkeypatch.setenv("CWDDIR", str(tmp_path))
+    for name in ("alice", "bob"):
+        directory = pytester.path / "submissions" / name
+        directory.mkdir(parents=True)
+        (directory / "data.txt").write_text(f"{name}\n")
+        (directory / "solution.py").write_text('def read():\n    return open("data.txt").read().strip()\n')
+    (pytester.path / "data.txt").write_text("suite\n")
+    pytester.makepyfile(
+        """
+        import os, pathlib, pytest
+
+        def record(label, value):
+            pathlib.Path(os.environ["CWDDIR"], label).write_text(value)
+
+        def test_body_reads(source):
+            record(f"body-{source.name}", open("data.txt").read().strip())
+
+        def test_source_reads(source):
+            record(f"source-{source.name}", source.import_module("solution").read())
+
+        @pytest.mark.no_chdir
+        def test_opted_out_reads(source):
+            record(f"opted-out-{source.name}", open("data.txt").read().strip())
+
+        @pytest.mark.no_sources
+        def test_unfanned_reads():
+            record("unfanned", open("data.txt").read().strip())
+        """
+    )
+    return pytester, tmp_path
+
+
 class TestAutomaticMove:
     """Every fanned test runs inside the source it is testing."""
 
@@ -168,6 +207,68 @@ class TestOptingOut:
         result = pytester.runpytest("--sources", "submissions/*", "-n", "0")
 
         result.assert_outcomes(passed=1)
+
+
+class TestRelativePaths:
+    """Where a relative open lands, on both sides of the test boundary.
+
+    The rest of this file asserts on the working directory itself. These assert
+    on what opening a file through it actually returns, which is the thing the
+    working directory exists to decide.
+    """
+
+    @pytest.mark.parametrize("workers", WORKERS)
+    def test_the_test_body_reads_the_sources_copy(self, read_probe, workers):
+        pytester, recorded = read_probe
+
+        result = pytester.runpytest("--sources", "submissions/*", "-n", workers)
+        result.assert_outcomes(passed=7)
+
+        for name in ("alice", "bob"):
+            assert (recorded / f"body-{name}").read_text() == name
+
+    @pytest.mark.parametrize("workers", WORKERS)
+    def test_a_source_function_reads_its_own_copy(self, read_probe, workers):
+        """Call time in a default run, the case that needs no source.chdir().
+
+        The import-time case is covered above; this is the same file read from a
+        function the test calls, where a manual chdir would have been an option.
+        """
+        pytester, recorded = read_probe
+
+        result = pytester.runpytest("--sources", "submissions/*", "-n", workers)
+        result.assert_outcomes(passed=7)
+
+        for name in ("alice", "bob"):
+            assert (recorded / f"source-{name}").read_text() == name
+
+    def test_no_chdir_sends_the_open_back_to_the_suite(self, read_probe):
+        """The documented cost: a relative path in your own tests moves too."""
+        pytester, recorded = read_probe
+
+        pytester.runpytest("--sources", "submissions/*", "-n", "0").assert_outcomes(passed=7)
+
+        for name in ("alice", "bob"):
+            assert (recorded / f"opted-out-{name}").read_text() == "suite"
+
+    def test_an_unfanned_test_reads_the_suites_copy(self, read_probe):
+        pytester, recorded = read_probe
+
+        pytester.runpytest("--sources", "submissions/*", "-n", "0").assert_outcomes(passed=7)
+
+        assert (recorded / "unfanned").read_text() == "suite"
+
+    def test_one_filename_gives_three_answers_in_a_single_run(self, read_probe):
+        """Both files exist under the same name, so the directory is what decides."""
+        pytester, recorded = read_probe
+
+        pytester.runpytest("--sources", "submissions/*", "-n", "0").assert_outcomes(passed=7)
+
+        assert {
+            (recorded / "body-alice").read_text(),
+            (recorded / "body-bob").read_text(),
+            (recorded / "opted-out-alice").read_text(),
+        } == {"alice", "bob", "suite"}
 
 
 class TestRestoration:
