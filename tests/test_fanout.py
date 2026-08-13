@@ -138,6 +138,25 @@ class TestSourceActivation:
         result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
         result.assert_outcomes(passed=1)
 
+    def test_an_unfanned_test_does_not_inherit_the_source_before_it(self, submissions):
+        """A source stays active across its group, so an unfanned test running
+        after a fanned one would otherwise import whatever was left behind."""
+        submissions.makepyfile(
+            """
+            import pytest
+
+            def test_fanned(source):
+                import solution
+
+            @pytest.mark.no_sources
+            def test_unfanned():
+                with pytest.raises(ModuleNotFoundError):
+                    import solution
+            """
+        )
+        result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
+        result.assert_outcomes(passed=3)
+
 
 class TestSourcesMarkerNarrows:
     """

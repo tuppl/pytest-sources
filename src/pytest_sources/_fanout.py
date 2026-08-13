@@ -41,6 +41,11 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     source = source_of_item(item)
     if source is not None:
         source.activate()
+        return
+
+    current = active()
+    if current is not None:
+        current.deactivate()
 
 
 @pytest.hookimpl
