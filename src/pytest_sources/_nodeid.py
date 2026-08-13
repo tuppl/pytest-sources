@@ -111,8 +111,8 @@ def _patch() -> None:
     if call_spec is None:
         return
 
-    _original_id = call_spec.id
-    call_spec.id = property(lambda self: delimiter().join(self._idlist))
+    _original_id = call_spec.id  # type: ignore[attr-defined]
+    call_spec.id = property(lambda self: delimiter().join(self._idlist))  # type: ignore[attr-defined]
 
 
 def _unpatch() -> None:
@@ -122,7 +122,7 @@ def _unpatch() -> None:
 
     call_spec = _call_spec_class()
     if call_spec is not None:
-        call_spec.id = _original_id
+        call_spec.id = _original_id  # type: ignore[attr-defined]
     _original_id = None
 
 
@@ -133,7 +133,7 @@ def _call_spec_class() -> type | None:
     try:
         from _pytest.python import CallSpec2
     except ImportError:  # pragma: no cover - depends on the pytest version
-        CallSpec2 = None
+        CallSpec2 = None  # type: ignore[assignment, misc]
 
     if CallSpec2 is None or not isinstance(getattr(CallSpec2, "id", None), property):
         warnings.warn(
