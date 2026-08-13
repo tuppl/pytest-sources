@@ -21,7 +21,7 @@ def source_of(nodeid: str, source_ids: Container[str]) -> str:
 
     The source is always the first part of the nodeid up until the delimiter.
     """
-    nodeid = _drop_group(nodeid)
+    nodeid = drop_group(nodeid)
     start = nodeid.find("[", nodeid.rfind("::") + 1)
     if start == -1:
         return UNFANNED
@@ -29,7 +29,7 @@ def source_of(nodeid: str, source_ids: Container[str]) -> str:
     return candidate if candidate in source_ids else UNFANNED
 
 
-def _drop_group(nodeid: str) -> str:
+def drop_group(nodeid: str) -> str:
     """
     Drop the "@group" xdist appends under --dist loadgroup.
     """

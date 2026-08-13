@@ -2,7 +2,7 @@ import importlib
 import os
 import sys
 import warnings
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
@@ -54,6 +54,12 @@ class TestIdentity:
     def test_id_of_source_outside_the_root(self, root, alice):
         (outside,) = make_sources([alice.path], root / "grading")
         assert outside.id == "../submissions/alice"
+
+    def test_id_of_source_on_another_drive_is_absolute(self):
+        """Windows only: no relative path exists between two drives."""
+        path = PureWindowsPath("D:/submissions/alice")
+
+        assert source_module._relative_id(path, PureWindowsPath("C:/grading")) == "D:/submissions/alice"
 
     def test_name_is_the_basename(self, alice):
         assert alice.name == "alice"

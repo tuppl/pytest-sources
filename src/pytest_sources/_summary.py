@@ -4,7 +4,7 @@ from enum import StrEnum
 import pytest
 
 from pytest_sources._discover import resolve
-from pytest_sources._nodeid import delimiter, source_of
+from pytest_sources._nodeid import delimiter, drop_group, source_of
 
 
 class Summary(StrEnum):
@@ -162,7 +162,7 @@ def _shorten(labels) -> dict[str, str]:
 
 def _test_of(nodeid: str, source: str) -> str:
     """The nodeid with its source taken out, so one test lines up across sources."""
-    head, bracket, params = nodeid.partition("[")
+    head, bracket, params = drop_group(nodeid).partition("[")
     if not bracket:
         return head
     rest = params.removesuffix("]").removeprefix(source).removeprefix(delimiter())

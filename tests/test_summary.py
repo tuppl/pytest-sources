@@ -143,6 +143,37 @@ class TestGrids:
 
         assert grid(result)["submissions/alice"] == ["x", "X"]
 
+    def test_a_grouped_test_is_labelled_without_its_group(self, pytester):
+        """xdist appends "@group" to the nodeid, which the label must not carry."""
+        for name in ("alice", "bob"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.xdist_group("db")
+            def test_grouped(source): ...
+            """
+        )
+
+        result = pytester.runpytest(
+            "--sources", "submissions/*", "--dist", "loadgroup", "-n", "2", "--sources-summary=sources"
+        )
+
+        assert section(result)[0].split()[1:] == ["test_grouped"]
+
+    def test_sources_sharing_a_basename_keep_their_full_heading(self, pytester):
+        """Shortening headings to the basename would merge these two columns."""
+        for parent in ("submissions", "other"):
+            (pytester.path / parent / "alice").mkdir(parents=True)
+        pytester.makepyfile("def test_x(source): ...")
+
+        result = pytester.runpytest(
+            "--sources", "submissions/*", "--sources", "other/*", "-n", "0", "--sources-summary=tests"
+        )
+
+        assert section(result)[0].split()[1:] == ["other/alice", "submissions/alice"]
+
 
 class TestOutcomes:
     """Folding a test's three phase reports into one result."""
