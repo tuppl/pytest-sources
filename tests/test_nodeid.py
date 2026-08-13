@@ -12,6 +12,7 @@ Covers how the bracket is written, and source_of reading it back.
 
 import pytest
 
+from pytest_sources import _nodeid
 from pytest_sources._nodeid import DEFAULT, UNFANNED, source_of
 
 SOURCE_IDS = {
@@ -241,6 +242,59 @@ class TestSourceOf:
 
     def test_keeps_a_source_containing_an_at_sign(self):
         assert source_of("t.py::test_x[submissions/al@ce]", SOURCE_IDS | {"submissions/al@ce"}) == "submissions/al@ce"
+
+
+class TestMovedInternals:
+    """What happens when pytest no longer has the private class we patch.
+
+    CallSpec2.id is private, so a future pytest may rename or move it. Losing the
+    delimiter costs isolation, never correctness, so it warns rather than fails.
+    """
+
+    def test_a_renamed_callspec_warns(self, monkeypatch):
+        monkeypatch.delattr("_pytest.python.CallSpec2")
+
+        with pytest.warns(pytest.PytestWarning, match="could not set the parameter id delimiter"):
+            assert _nodeid._call_spec_class() is None
+
+    def test_an_id_that_is_no_longer_a_property_warns(self, monkeypatch):
+        monkeypatch.setattr("_pytest.python.CallSpec2", object)
+
+        with pytest.warns(pytest.PytestWarning, match="could not set the parameter id delimiter"):
+            assert _nodeid._call_spec_class() is None
+
+    def test_the_warning_names_the_delimiter_in_use(self, monkeypatch):
+        monkeypatch.setattr("_pytest.python.CallSpec2", object)
+        monkeypatch.setattr(_nodeid, "_delimiter", "#")
+
+        with pytest.warns(pytest.PytestWarning, match="'#'"):
+            _nodeid._call_spec_class()
+
+    def test_patching_is_skipped_rather_than_half_applied(self, monkeypatch):
+        monkeypatch.setattr("_pytest.python.CallSpec2", object)
+        monkeypatch.setattr(_nodeid, "_original_id", None)
+
+        with pytest.warns(pytest.PytestWarning):
+            _nodeid._patch()
+
+        assert _nodeid._original_id is None
+
+    def test_ids_keep_pytests_own_separator_when_the_patch_is_skipped(self, pytester, monkeypatch):
+        """The degraded run still works, it just cannot pin parametrised tests."""
+        monkeypatch.setattr(_nodeid, "_patch", lambda: None)
+        make_sources(pytester, "alice")
+        pytester.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.parametrize("n", [1])
+            def test_x(source, n): ...
+            """
+        )
+
+        (nodeid,) = collect_sources(pytester)
+
+        assert nodeid.endswith("[submissions/alice-1]")
 
 
 class TestDelimiterOption:
