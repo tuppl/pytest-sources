@@ -4,6 +4,7 @@ import contextlib
 import importlib
 import os
 import sys
+import warnings
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -57,6 +58,36 @@ class Source:
         sys.path.insert(0, str(self.path))
         importlib.invalidate_caches()
         _active = self
+        self._warn_shadowed()
+
+    def _warn_shadowed(self) -> None:
+        """
+        Warn about modules this source provides that are already imported elsewhere.
+
+        An import returns the loaded module without consulting sys.path, so every
+        source would be tested against that one and every test would pass.
+        """
+        shadowed = sorted(name for name in self._provides() if _imported_outside(name, self.path))
+        if shadowed:
+            warnings.warn(
+                f"{self.id} provides {', '.join(repr(name) for name in shadowed)}, "
+                f"already imported from outside the source. Every source will be tested "
+                f"against the module already loaded. Import source code inside the test "
+                f"rather than at module level.",
+                pytest.PytestWarning,
+                stacklevel=3,
+            )
+
+    def _provides(self) -> set[str]:
+        """Top-level module names importable from this source."""
+        names = set()
+        for entry in self.path.iterdir():
+            if entry.suffix == ".py" and entry.stem != "__init__":
+                names.add(entry.stem)
+            elif entry.is_dir() and (entry / "__init__.py").exists():
+                names.add(entry.name)
+        # pytest owns this name and loads its own before any source is active.
+        return names - {"conftest"}
 
     def deactivate(self) -> None:
         global _active
@@ -79,6 +110,12 @@ class Source:
             if exc.name and (exc.name == name or name.startswith(f"{exc.name}.")):
                 raise SourceImportError(f"{self.id} has no module {name!r}") from None
             raise
+
+
+def _imported_outside(name: str, path: Path) -> bool:
+    module = sys.modules.get(name)
+    file = getattr(module, "__file__", None) if module is not None else None
+    return file is not None and not Path(file).is_relative_to(path)
 
 
 def make_sources(paths: Sequence[Path], root: Path) -> list[Source]:

@@ -1,5 +1,7 @@
+import importlib
 import os
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
@@ -145,6 +147,70 @@ class TestActivation:
         alice.import_module("solution")
         alice.deactivate()
         assert "pytest" in sys.modules
+
+
+class TestShadowedModules:
+    """Warning when a source's module was already imported from somewhere else.
+
+    An import returns whatever is in sys.modules without consulting sys.path, so
+    a name loaded before activation is handed to every source in turn. Nothing
+    fails and no source's code runs.
+    """
+
+    @pytest.fixture
+    def decoy(self, root, monkeypatch):
+        """A solution.py outside the sources, imported first."""
+        (root / "solution.py").write_text("VALUE = 999\n")
+        monkeypatch.syspath_prepend(str(root))
+        return importlib.import_module("solution")
+
+    def test_a_shadowed_module_warns_on_activation(self, alice, decoy):
+        with pytest.warns(pytest.PytestWarning, match="already imported from outside the source"):
+            alice.activate()
+
+    def test_the_warning_names_the_source_and_the_module(self, alice, decoy):
+        with pytest.warns(pytest.PytestWarning, match="submissions/alice provides 'solution'"):
+            alice.activate()
+
+    def test_every_source_is_warned_about_in_turn(self, alice, bob, decoy):
+        with pytest.warns(pytest.PytestWarning):
+            alice.activate()
+        with pytest.warns(pytest.PytestWarning, match="submissions/bob"):
+            bob.activate()
+
+    def test_nothing_is_warned_about_without_a_shadow(self, alice, recwarn):
+        alice.activate()
+        assert not [warning for warning in recwarn if "outside the source" in str(warning.message)]
+
+    def test_the_sources_own_module_is_not_a_shadow(self, alice, recwarn):
+        """Its file is inside the source, so re-activating must stay quiet."""
+        alice.import_module("solution")
+        alice.deactivate()
+        alice.activate()
+
+        assert not [warning for warning in recwarn if "outside the source" in str(warning.message)]
+
+    def test_a_package_directory_counts_as_a_module(self, alice, root, monkeypatch):
+        (alice.path / "pkg").mkdir()
+        (alice.path / "pkg" / "__init__.py").write_text("VALUE = 1\n")
+        (root / "pkg").mkdir()
+        (root / "pkg" / "__init__.py").write_text("VALUE = 999\n")
+        monkeypatch.syspath_prepend(str(root))
+        importlib.import_module("pkg")
+
+        with pytest.warns(pytest.PytestWarning, match="'pkg'"):
+            alice.activate()
+
+    def test_a_conftest_is_left_alone(self, alice, root, monkeypatch):
+        """pytest loads its own conftest before any source, so it always collides."""
+        (alice.path / "conftest.py").write_text("")
+        (root / "conftest.py").write_text("")
+        monkeypatch.syspath_prepend(str(root))
+        importlib.import_module("conftest")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            alice.activate()
 
 
 class TestImportModule:
