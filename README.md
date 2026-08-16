@@ -111,8 +111,6 @@ When:
 - `num_worker <= num_source`: each testing of a source is a work item, with surplus work items queued.
 - `num_worker > num_source`: each source is split into `num_worker / num_source` work items.
 
-With `-n auto`, the number of workers will be capped by the number of available CPUs on your machine.
-
 > pytest-xdist assumes number of workers and number of processes to be one-to-one. But pytest-sources has decoupled this by allowing workers to shutdown and spin-up new processes with a worker.
 
 ## Parallel testing groups
