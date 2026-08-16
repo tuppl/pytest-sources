@@ -18,10 +18,6 @@ class SourceScheduling(LoadScopeScheduling):
     or subset of a testing suite for a source. Each work item is run in its own
     process, therefore when a work item is exhausted the worker will spin up a new
     process.
-
-    A work item is a source and, when --dist names a mode, one of that mode's groups
-    within it. Chunking fills the space the mode leaves undefined and never cuts
-    across a group the mode defined.
     """
 
     def __init__(self, config: pytest.Config, log: Producer | None = None) -> None:
@@ -34,7 +30,6 @@ class SourceScheduling(LoadScopeScheduling):
         mode = config.stash.get(REQUESTED_DIST, None)
         within = WITHIN.get(mode) if mode is not None else None
         self._within = within.__get__(self) if within is not None else None
-        # loadgroup keys the marked tests only, so the rest still want chunking.
         self._chunks_wanted = self._within is None or mode is Dist.LOADGROUP
 
     def schedule(self) -> None:
@@ -45,7 +40,6 @@ class SourceScheduling(LoadScopeScheduling):
     def _split_scope(self, nodeid: str) -> str:
         if self._within is not None:
             within = self._within(nodeid)
-            # loadgroup hands back the nodeid for a test carrying no group.
             if within != nodeid:
                 return f"{source_of(nodeid, self._source_ids)}{delimiter()}{within}"
 
@@ -113,8 +107,6 @@ def start_replacement(node: WorkerController, error: object | None) -> None:
     Fires before the scheduler is told the node has gone, so the replacement joins
     the run before the old node leaves it and xdist never sees zero active nodes.
     """
-    # A worker that died is replaced by xdist itself, against the
-    # --max-worker-restart budget. Cloning here as well would give it two.
     if error is not None:
         return
 

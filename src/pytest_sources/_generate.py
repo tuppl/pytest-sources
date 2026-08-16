@@ -3,7 +3,6 @@ import pytest
 from pytest_sources._core.discover import parametrizes_source, sources_for
 
 
-# tryfirst: the source's id must lead the bracket, where source_of looks for it.
 @pytest.hookimpl(tryfirst=True)
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     if metafunc.definition.get_closest_marker("no_sources"):

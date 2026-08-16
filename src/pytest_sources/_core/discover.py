@@ -79,8 +79,7 @@ def _narrow(globs: tuple[str, ...], config: pytest.Config) -> list[Source]:
     """
     matched = make_sources(discover(globs, config.rootpath), config.rootpath)
     declared = resolve(config)
-    # Nothing declared, so the markers are the whole run and there is no set to
-    # narrow. Every source shares a process, as under -n 0.
+
     if not declared:
         return matched
 

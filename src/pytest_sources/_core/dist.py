@@ -30,12 +30,7 @@ REQUESTED_DIST = pytest.StashKey[Dist | None]()
 def settle(config: pytest.Config) -> None:
     """
     Settle what the user asked --dist for, while the answer is still legible.
-
-    xdist's own pytest_cmdline_main rewrites "no" to "load" as soon as a worker
-    count exists, and nothing downstream can tell the two apart afterwards.
     """
-    # The globs rather than the resolved sources: a --dist conflict should be
-    # reported even when the globs are bad, and resolving changes nothing here.
     if not _is_worker(config) and (config.getoption("sources") or config.getini("sources")):
         mode = request_dist(config)
         config.stash[REQUESTED_DIST] = mode
@@ -59,9 +54,6 @@ def _reject_conflicts(config: pytest.Config, mode: Dist | None) -> None:
 def request_dist(config: pytest.Config) -> Dist | None:
     """
     The mode the user asked for, or None if they did not ask.
-
-    Only readable before xdist's pytest_cmdline_main, which rewrites "no" to "load"
-    as soon as a worker count is set.
     """
     if getattr(config.option, "distload", False):
         return Dist.LOAD

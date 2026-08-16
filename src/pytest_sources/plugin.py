@@ -1,5 +1,3 @@
-# Each module implements one stage of the pytest pipeline and no two implement
-# the same hook, so the order here is readability, not behaviour.
 pytest_plugins = [
     "pytest_sources._options",
     "pytest_sources._cmdline",
