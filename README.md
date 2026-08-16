@@ -37,7 +37,7 @@ tests/test_add.py::test_add[sources/bob]   FAILED
 
 Clearly each source must satisfy some interface such that the test suite can run without error. If there is an error, then pytest will error that test and move onto the next test.
 
-Multiple sources paths can be accumulated:
+Multiple source paths can be accumulated:
 
 ```bash
 pytest --sources "round1/*" --sources "round2/*"
@@ -88,14 +88,19 @@ The `--sources-summary` flag options are:
 
 ## Parallel testing
 
-Testing many sources sequentially can be long. Testing many untrusted sources in a single process brings the risk of crashing the entire test suite. This library extends `pytest-xdist` to enable parallel testing such that each source is isolated and tested in its own process. The number of workers can be set with the [-n](https://pytest-xdist.readthedocs.io/en/stable/distribution.html) flag:
+This library extends `pytest-xdist` to enable parallel testing such that each source is isolated and tested in its own process. By default, parallel testing is disabled (which means tests for every source are run within a single process).
+
+Without workers there is no process isolation so a test that crashes will crash the suite. Pass `-n auto` when testing untrusted code.
+
+The number of workers can be set with the [-n](https://pytest-xdist.readthedocs.io/en/stable/distribution.html) flag:
 
 ```bash
-pytest --sources "sources/*"        # default: -n auto
-pytest --sources "sources/*" -n 4   # 4 workers
+pytest --sources "sources/*"          # default: -n 0
+pytest --sources "sources/*" -n auto  # one worker per source, capped at CPU count
+pytest --sources "sources/*" -n 4     # 4 workers
 ```
 
-The testing of a source is grouped as a single work item:
+When parallel testing is enabled, the testing of a source is grouped as a single work item:
 - A work item is a unit of work that is consumed by a worker (one-at-a-time).
 - Each work item runs in its own process.
 - A work item deals with exactly one source.
@@ -106,7 +111,7 @@ When:
 - `num_worker <= num_source`: each testing of a source is a work item, with surplus work items queued.
 - `num_worker > num_source`: each source is split into `num_worker / num_source` work items.
 
-Parallel testing can be disabled with `-n 0` or `--dist no` which disables source isolation in a process. Every source will be tested in the calling process.
+With `-n auto`, the number of workers will be capped by the number of available CPUs on your machine.
 
 > pytest-xdist assumes number of workers and number of processes to be one-to-one. But pytest-sources has decoupled this by allowing workers to shutdown and spin-up new processes with a worker.
 

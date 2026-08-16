@@ -8,15 +8,48 @@ from pytest_sources._xdist import pytest_testnodedown
 
 
 class TestAutoWorkerCount:
-    """Answering -n auto with the number of sources."""
+    """Answering -n auto with the number of sources, bounded by the CPU count."""
 
-    def test_auto_num_workers_is_the_source_count(self, submissions):
+    def test_auto_num_workers_is_the_source_count(self, submissions, monkeypatch):
+        monkeypatch.setattr(_xdist.os, "cpu_count", lambda: 8)
         config = submissions.parseconfigure("--sources", "submissions/*")
         assert _xdist.pytest_xdist_auto_num_workers(config) == 3
 
     def test_auto_num_workers_defers_to_xdist_without_sources(self, pytester):
         config = pytester.parseconfigure()
         assert _xdist.pytest_xdist_auto_num_workers(config) is None
+
+    def test_auto_num_workers_is_capped_at_the_cpu_count(self, submissions, monkeypatch):
+        """A hundred submissions must not mean a hundred interpreters at once."""
+        monkeypatch.setattr(_xdist.os, "cpu_count", lambda: 2)
+        config = submissions.parseconfigure("--sources", "submissions/*")
+        assert _xdist.pytest_xdist_auto_num_workers(config) == 2
+
+    def test_an_unknown_cpu_count_still_starts_a_worker(self, submissions, monkeypatch):
+        """os.cpu_count() is documented to return None when it cannot tell."""
+        monkeypatch.setattr(_xdist.os, "cpu_count", lambda: None)
+        config = submissions.parseconfigure("--sources", "submissions/*")
+        assert _xdist.pytest_xdist_auto_num_workers(config) == 1
+
+    def test_the_cap_costs_no_isolation(self, pytester, tmp_path, monkeypatch):
+        """Fewer workers than sources still gives each source its own process,
+        because a worker is replaced rather than reused between them."""
+        monkeypatch.setenv("PIDDIR", str(tmp_path))
+        for name in ("alice", "bob", "carol", "dave"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile(
+            """
+            import os, pathlib
+
+            def test_pid(source):
+                pathlib.Path(os.environ["PIDDIR"], source.name).write_text(str(os.getpid()))
+            """
+        )
+
+        result = pytester.runpytest("--sources", "submissions/*", "-n", "2")
+
+        result.assert_outcomes(passed=4)
+        assert len({path.read_text() for path in tmp_path.iterdir()}) == 4
 
     def test_auto_starts_one_worker_per_source(self, submissions):
         """Assert on workers started, not on workers that reported.

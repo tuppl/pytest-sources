@@ -88,3 +88,31 @@ class TestDistMode:
         pytester.makepyfile("def test_one(): pass")
         result = pytester.runpytest("--dist", "worksteal", "-n", "1")
         result.assert_outcomes(passed=1)
+
+
+class TestOptInDistribution:
+    """Workers exist only when the user asks for them, like plain xdist."""
+
+    def test_no_workers_are_implied_by_sources_alone(self, submissions):
+        result = submissions.runpytest("--sources", "submissions/*")
+
+        result.assert_outcomes(passed=6)
+        result.stdout.no_fnmatch_line("*created:*workers*")
+
+    def test_a_bare_run_shares_one_process(self, pytester, tmp_path, monkeypatch):
+        monkeypatch.setenv("PIDDIR", str(tmp_path))
+        for name in ("alice", "bob"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile(
+            """
+            import os, pathlib
+
+            def test_pid(source):
+                pathlib.Path(os.environ["PIDDIR"], source.name).write_text(str(os.getpid()))
+            """
+        )
+
+        result = pytester.runpytest("--sources", "submissions/*")
+
+        result.assert_outcomes(passed=2)
+        assert len({path.read_text() for path in tmp_path.iterdir()}) == 1

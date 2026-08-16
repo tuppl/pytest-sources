@@ -5,8 +5,6 @@ from enum import StrEnum
 import pytest
 from xdist.scheduler import LoadFileScheduling, LoadGroupScheduling, LoadScopeScheduling
 
-from pytest_sources._core.discover import resolve
-
 
 class Dist(StrEnum):
     EACH = "each"
@@ -42,19 +40,6 @@ def settle(config: pytest.Config) -> None:
         mode = request_dist(config)
         config.stash[REQUESTED_DIST] = mode
         _reject_conflicts(config, mode)
-
-        # Do not distribute.
-        if mode is Dist.NO and getattr(config.option, "numprocesses", None) is None:
-            config.option.numprocesses = 0
-
-
-def imply_worker_count(config: pytest.Config) -> None:
-    """
-    Give every source its own process unless the user asked for otherwise.
-    """
-    unset = getattr(config.option, "numprocesses", None) is None
-    if unset and not _is_worker(config) and resolve(config):
-        config.option.numprocesses = "auto"
 
 
 def _reject_conflicts(config: pytest.Config, mode: Dist | None) -> None:
