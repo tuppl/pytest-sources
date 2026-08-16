@@ -112,6 +112,11 @@ class Source:
             raise
 
 
+def source_for(item: pytest.Item) -> Source | None:
+    callspec = getattr(item, "callspec", None)
+    return callspec.params.get("source") if callspec else None
+
+
 def _imported_outside(name: str, path: Path) -> bool:
     module = sys.modules.get(name)
     file = getattr(module, "__file__", None) if module is not None else None

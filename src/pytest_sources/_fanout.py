@@ -3,7 +3,7 @@ from _pytest.python import FunctionDefinition
 
 from pytest_sources._discover import discover, resolve
 from pytest_sources._stash import MARKER_SOURCES, SOURCES
-from pytest_sources.source import Source, active, make_sources
+from pytest_sources.source import Source, active, make_sources, source_for
 
 
 @pytest.hookimpl
@@ -38,7 +38,7 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     """
     Put the item's source on sys.path, before any fixture runs.
     """
-    source = source_of_item(item)
+    source = source_for(item)
     if source is not None:
         source.activate()
         return
@@ -61,12 +61,6 @@ def source(request: pytest.FixtureRequest) -> Source:
     if source is None:
         pytest.skip("no sources configured; pass --sources GLOB")
     return source
-
-
-def source_of_item(item: pytest.Item) -> Source | None:
-    """The source an item was fanned out to, read off its parametrization."""
-    callspec = getattr(item, "callspec", None)
-    return callspec.params.get("source") if callspec else None
 
 
 def _sources_for(definition: FunctionDefinition, config: pytest.Config) -> list[Source]:

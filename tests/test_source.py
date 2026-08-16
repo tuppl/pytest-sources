@@ -237,3 +237,52 @@ class TestImportModule:
         (alice / "broken.py").write_text("import definitely_not_installed_xyz\n")
         with pytest.raises(ModuleNotFoundError):
             alice.import_module("broken")
+
+
+class TestSourceFor:
+    """The public accessor an integrating plugin calls on an item."""
+
+    def test_source_for_answers_from_another_plugins_hook(self, pytester):
+        """The supported route to the item's source, without touching callspec."""
+        for name in ("alice", "bob"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makeconftest(
+            """
+            import pytest_sources
+
+            def pytest_runtest_setup(item):
+                source = pytest_sources.source_for(item)
+                assert isinstance(source, pytest_sources.Source)
+                assert source.id.startswith("submissions/")
+            """
+        )
+        pytester.makepyfile("def test_x(): ...")
+
+        result = pytester.runpytest("--sources", "submissions/*", "-n", "0")
+
+        result.assert_outcomes(passed=2)
+
+    def test_source_for_is_none_for_an_unfanned_item(self, pytester):
+        (pytester.path / "submissions" / "alice").mkdir(parents=True)
+        pytester.makeconftest(
+            """
+            import pytest
+            import pytest_sources
+
+            def pytest_runtest_setup(item):
+                if item.get_closest_marker("no_sources"):
+                    assert pytest_sources.source_for(item) is None
+            """
+        )
+        pytester.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.no_sources
+            def test_helper(): ...
+            """
+        )
+
+        result = pytester.runpytest("--sources", "submissions/*", "-n", "0")
+
+        result.assert_outcomes(passed=1)

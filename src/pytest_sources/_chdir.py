@@ -2,7 +2,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from pytest_sources._fanout import source_of_item
+from pytest_sources.source import source_for
 
 
 @pytest.hookimpl
@@ -13,7 +13,7 @@ def pytest_configure(config: pytest.Config) -> None:
 @pytest.fixture(autouse=True)
 def _source_cwd(request: pytest.FixtureRequest) -> Iterator[None]:
     # Requesting the source fixture instead would skip every unfanned test.
-    source = source_of_item(request.node)
+    source = source_for(request.node)
 
     if source is None or request.node.get_closest_marker("no_chdir"):
         yield
