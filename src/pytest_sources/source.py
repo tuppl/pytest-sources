@@ -114,7 +114,8 @@ class Source:
 
 def source_for(item: pytest.Item) -> Source | None:
     callspec = getattr(item, "callspec", None)
-    return callspec.params.get("source") if callspec else None
+    source = callspec.params.get("source") if callspec else None
+    return source if isinstance(source, Source) else None
 
 
 def _imported_outside(name: str, path: Path) -> bool:

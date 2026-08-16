@@ -3,11 +3,12 @@ import os
 import sys
 import warnings
 from pathlib import Path, PureWindowsPath
+from types import SimpleNamespace
 
 import pytest
 
 from pytest_sources import source as source_module
-from pytest_sources.source import Source, SourceImportError, make_sources
+from pytest_sources.source import Source, SourceImportError, make_sources, source_for
 
 
 @pytest.fixture(autouse=True)
@@ -286,3 +287,8 @@ class TestSourceFor:
         result = pytester.runpytest("--sources", "submissions/*", "-n", "0")
 
         result.assert_outcomes(passed=1)
+
+    def test_source_for_ignores_a_foreign_source_value(self):
+        item = SimpleNamespace(callspec=SimpleNamespace(params={"source": "config.yaml"}))
+
+        assert source_for(item) is None

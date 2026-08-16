@@ -21,6 +21,13 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     if not sources:
         return
 
+    if _parametrizes_source(metafunc.definition):
+        raise pytest.UsageError(
+            f"the parameter name 'source' is taken by pytest-sources while --sources "
+            f"is active: {metafunc.definition.nodeid}. Rename the parameter, or mark "
+            f"the test no_sources to keep it."
+        )
+
     if "source" not in metafunc.fixturenames:
         metafunc.fixturenames.append("source")
 
@@ -61,6 +68,16 @@ def source(request: pytest.FixtureRequest) -> Source:
     if source is None:
         pytest.skip("no sources configured; pass --sources GLOB")
     return source
+
+
+def _parametrizes_source(definition: FunctionDefinition) -> bool:
+    """Whether the test carries a parametrize mark of its own named "source"."""
+    for mark in definition.iter_markers("parametrize"):
+        argnames = mark.args[0] if mark.args else ()
+        names = [name.strip() for name in argnames.split(",")] if isinstance(argnames, str) else argnames
+        if "source" in names:
+            return True
+    return False
 
 
 def _sources_for(definition: FunctionDefinition, config: pytest.Config) -> list[Source]:

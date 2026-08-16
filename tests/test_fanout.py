@@ -158,6 +158,79 @@ class TestSourceActivation:
         result.assert_outcomes(passed=3)
 
 
+class TestForeignSourceParam:
+    """A test whose own parameter happens to be called "source".
+
+    The plugin is registered in every run of every project that installs it,
+    so the common name must stay usable whenever --sources is not in play.
+    """
+
+    def test_a_users_source_param_works_without_sources(self, pytester):
+        pytester.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.parametrize("source", ["config.yaml", "config.json"])
+            def test_parses_either_config_format(source):
+                assert source.startswith("config")
+            """
+        )
+        result = pytester.runpytest("-n", "0")
+        result.assert_outcomes(passed=2)
+
+    def test_a_foreign_source_param_reads_as_unfanned(self, pytester):
+        pytester.makeconftest(
+            """
+            import pytest_sources
+
+            def pytest_runtest_setup(item):
+                assert pytest_sources.source_for(item) is None
+            """
+        )
+        pytester.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.parametrize("source", ["config.yaml"])
+            def test_x(source): ...
+            """
+        )
+        result = pytester.runpytest("-n", "0")
+        result.assert_outcomes(passed=1)
+
+    def test_the_collision_with_sources_is_a_usage_error(self, submissions):
+        submissions.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.parametrize("source", ["config.yaml"])
+            def test_x(source): ...
+            """
+        )
+
+        result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
+
+        assert result.ret != 0
+        result.stdout.fnmatch_lines(["*'source' is taken by pytest-sources*test_x*"])
+
+    def test_no_sources_keeps_the_users_param(self, submissions):
+        """The escape hatch: opted out of the fanout, the name is free again."""
+        submissions.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.no_sources
+            @pytest.mark.parametrize("source", ["config.yaml"])
+            def test_x(source):
+                assert source == "config.yaml"
+            """
+        )
+
+        result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
+
+        result.assert_outcomes(passed=1)
+
+
 class TestSourcesMarkerNarrows:
     """
     The marker selects from the run's sources rather than adding to them.
