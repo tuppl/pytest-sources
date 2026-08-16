@@ -175,6 +175,38 @@ class TestGrids:
         assert section(result)[0].split()[1:] == ["other/alice", "submissions/alice"]
 
 
+class TestForeignOutcomes:
+    def test_a_foreign_outcome_is_left_out_of_the_tally(self, pytester):
+        (pytester.path / "submissions" / "alice").mkdir(parents=True)
+        pytester.makeconftest(
+            """
+            import pytest
+
+            @pytest.hookimpl(wrapper=True)
+            def pytest_runtest_makereport(item, call):
+                report = yield
+                if report.when == "call" and item.originalname == "test_retried":
+                    report.outcome = "rerun"
+                return report
+
+            def pytest_report_teststatus(report, config):
+                if report.outcome == "rerun":
+                    return "rerun", "R", "RERUN"
+            """
+        )
+        pytester.makepyfile(
+            """
+            def test_ok(source): ...
+            def test_retried(source): ...
+            """
+        )
+
+        result = pytester.runpytest("--sources", "submissions/*", "-n", "0")
+
+        assert "INTERNALERROR" not in result.stdout.str()
+        assert rows(result)["submissions/alice"] == ["1", "0", "0", "0"]
+
+
 class TestOutcomes:
     """Folding a test's three phase reports into one result."""
 

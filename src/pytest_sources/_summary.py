@@ -170,19 +170,14 @@ def _test_of(nodeid: str, source: str) -> str:
 
 
 def _outcome(report: pytest.TestReport) -> Outcome | None:
-    """Fold a phase report into one outcome, or nothing.
-
-    A test reports three times. Only the call decides pass or fail; a setup or
-    teardown that blows up is an error, and a skip is usually raised in setup.
     """
-    # An xfail reports as skipped and an xpass as passed, so both would be
-    # counted as something they are not. An xpass in particular is a result
-    # worth seeing: the source did better than the test expected.
+    Fold a phase report into one outcome, or nothing.
+    """
     if hasattr(report, "wasxfail"):
         return Outcome.XPASSED if report.passed else Outcome.XFAILED
 
     if report.when == "call":
-        return Outcome(report.outcome)
+        return Outcome(report.outcome) if report.outcome in Outcome else None
     if report.failed:
         return Outcome.ERROR
     if report.when == "setup" and report.skipped:
