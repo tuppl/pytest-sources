@@ -13,6 +13,8 @@ from types import ModuleType
 
 import pytest
 
+from pytest_sources._core.nodeid import delimiter
+
 
 class SourceImportError(ImportError):
     """A source does not provide the requested module."""
@@ -132,8 +134,6 @@ def make_sources(paths: Sequence[Path], root: Path) -> list[Source]:
 
 def _validate(sources: Sequence[Source]) -> None:
     """Reject ids that a nodeid could not be traced back to a single source."""
-    from pytest_sources._nodeid import delimiter
-
     separator = delimiter()
     reserved = [source.id for source in sources if separator in source.id]
     if reserved:

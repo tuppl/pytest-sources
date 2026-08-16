@@ -1,5 +1,5 @@
 import warnings
-from collections.abc import Container, Generator
+from collections.abc import Container
 
 import pytest
 
@@ -37,38 +37,7 @@ def drop_group(nodeid: str) -> str:
     return nodeid[:at] if at != -1 else nodeid
 
 
-@pytest.hookimpl
-def pytest_addoption(parser: pytest.Parser) -> None:
-    group = parser.getgroup("sources")
-    group.addoption(
-        "--sources-delimiter",
-        dest="sources_delimiter",
-        metavar="CHAR",
-        default=None,
-        help=(
-            f"Character separating parameters in a test id, {DEFAULT!r} by default. No source path may contain the delimiter."
-        ),
-    )
-    parser.addini("sources_delimiter", default=DEFAULT, help="Default --sources-delimiter")
-
-
-# Validate delimiter while xdist deals out workers.
-@pytest.hookimpl(wrapper=True, tryfirst=True)
-def pytest_cmdline_main(config: pytest.Config) -> Generator[None, object, object]:
-    _update_delimiter(config)
-    return (yield)
-
-
-# Validate delimiter in case cmdline_main is skipped.
-@pytest.hookimpl(tryfirst=True)
-def pytest_configure(config: pytest.Config) -> None:
-    _update_delimiter(config)
-
-    if config.getoption("sources") or config.getini("sources"):
-        _patch()
-
-
-def _update_delimiter(config: pytest.Config) -> None:
+def update_delimiter(config: pytest.Config) -> None:
     global _delimiter
     chosen = config.getoption("sources_delimiter")
     if chosen is None:
@@ -76,8 +45,8 @@ def _update_delimiter(config: pytest.Config) -> None:
     _delimiter = _validate_delimiter(chosen)
 
 
-@pytest.hookimpl
-def pytest_unconfigure(config: pytest.Config) -> None:
+def reset() -> None:
+    """Restore CallSpec2.id and the default delimiter for the next in-process run."""
     global _delimiter
     _unpatch()
     _delimiter = DEFAULT
@@ -97,7 +66,7 @@ def _validate_delimiter(candidate: str) -> str:
 
 def _patch() -> None:
     """
-    Join parameter ids with the delimiter instead of xdist's default "-".
+    Join parameter ids with the delimiter instead of pytest's default "-".
 
     A source id is a path and "-" is legal in a directory name, so the "-" that
     pytest puts between parameters is indistinguishable from one that was

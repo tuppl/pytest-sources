@@ -291,3 +291,13 @@ class TestRestoration:
         pytester.runpytest("--sources", "submissions/*", "-n", "0").assert_outcomes(failed=1)
 
         assert Path.cwd() == before
+
+
+class TestSourceFixture:
+    """The source fixture without any sources configured."""
+
+    def test_requesting_source_without_any_sources_skips(self, pytester):
+        pytester.makepyfile("def test_x(source): pass")
+        result = pytester.runpytest("-rs")
+        result.assert_outcomes(skipped=1)
+        result.stdout.fnmatch_lines(["*no sources configured*"])

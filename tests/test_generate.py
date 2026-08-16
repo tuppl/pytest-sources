@@ -2,7 +2,7 @@ import sys
 
 import pytest
 
-from pytest_sources import source as source_module
+from pytest_sources._core import source as source_module
 
 
 @pytest.fixture(autouse=True)
@@ -69,93 +69,6 @@ class TestFanout:
         )
         result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
         result.assert_outcomes(passed=2)
-
-
-class TestSourceActivation:
-    def test_a_test_that_never_requests_source_can_import_it(self, submissions):
-        submissions.makepyfile(
-            """
-            def test_value():
-                import solution
-                assert solution.VALUE in (1, 2)
-            """
-        )
-        result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
-        result.assert_outcomes(passed=2)
-
-    def test_it_still_works_when_selected_on_its_own(self, submissions):
-        """Selection must not decide it: a sibling requesting source activates on its behalf."""
-        submissions.makepyfile(
-            """
-            def test_requests_source(source):
-                import solution
-
-            def test_does_not():
-                import solution
-            """
-        )
-        result = submissions.runpytest("--sources", "submissions/*", "-n", "0", "-k", "does_not")
-        result.assert_outcomes(passed=2, deselected=2)
-
-    def test_a_fixture_may_import_the_source(self, submissions):
-        """The hook is tryfirst, so the source is there before fixtures run."""
-        submissions.makepyfile(
-            """
-            import pytest
-
-            @pytest.fixture
-            def value():
-                import solution
-                return solution.VALUE
-
-            def test_value(value):
-                assert value in (1, 2)
-            """
-        )
-        result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
-        result.assert_outcomes(passed=2)
-
-    def test_the_run_leaves_sys_path_as_it_found_it(self, submissions):
-        """pytester runs in-process, so a source left active would follow us out."""
-        before = list(sys.path)
-
-        submissions.makepyfile("def test_x(): pass")
-        submissions.runpytest("--sources", "submissions/*", "-n", "0").assert_outcomes(passed=2)
-
-        assert sys.path == before
-
-    def test_an_unfanned_test_does_not_get_a_source(self, submissions):
-        submissions.makepyfile(
-            """
-            import pytest
-
-            @pytest.mark.no_sources
-            def test_x():
-                with pytest.raises(ModuleNotFoundError):
-                    import solution
-            """
-        )
-        result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
-        result.assert_outcomes(passed=1)
-
-    def test_an_unfanned_test_does_not_inherit_the_source_before_it(self, submissions):
-        """A source stays active across its group, so an unfanned test running
-        after a fanned one would otherwise import whatever was left behind."""
-        submissions.makepyfile(
-            """
-            import pytest
-
-            def test_fanned(source):
-                import solution
-
-            @pytest.mark.no_sources
-            def test_unfanned():
-                with pytest.raises(ModuleNotFoundError):
-                    import solution
-            """
-        )
-        result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
-        result.assert_outcomes(passed=3)
 
 
 class TestForeignSourceParam:
@@ -414,9 +327,3 @@ class TestSelection:
         # -n 0: workers deselect locally, so the controller reports no deselections.
         result = submissions.runpytest("--sources", "submissions/*", "-n", "0", "-k", "alice")
         result.assert_outcomes(passed=1, deselected=1)
-
-    def test_requesting_source_without_any_sources_skips(self, submissions):
-        submissions.makepyfile("def test_x(source): pass")
-        result = submissions.runpytest("-rs")
-        result.assert_outcomes(skipped=1)
-        result.stdout.fnmatch_lines(["*no sources configured*"])

@@ -1,43 +1,36 @@
 import pytest
 
-from pytest_sources._dist import Dist, request_dist
 
+class TestDelimiterAtCmdline:
+    """The delimiter is settled during pytest_cmdline_main, before anything reads it."""
 
-class TestRequestedDist:
-    """Recovering what the user asked --dist for, before xdist rewrites it."""
-
-    def test_nothing_asked_for_reads_as_unset(self, pytester):
-        assert request_dist(pytester.parseconfig()) is None
-
-    @pytest.mark.parametrize("spelling", [("--dist", "no"), ("--dist=no",)])
-    def test_an_explicit_no_is_not_the_default(self, pytester, spelling):
-        """xdist defaults dist to "no", so option alone cannot tell these apart.
-
-        Both spellings matter: only the argument scan can see an explicit "no",
-        and it has to match the separated and joined forms separately.
-        """
-        assert request_dist(pytester.parseconfig(*spelling)) is Dist.NO
-
-    @pytest.mark.parametrize("mode", ["loadfile", "loadscope", "loadgroup", "each", "worksteal"])
-    def test_a_named_mode_is_returned(self, pytester, mode):
-        assert request_dist(pytester.parseconfig(f"--dist={mode}")) is Dist(mode)
-
-    def test_the_load_shortcut_is_recognised(self, pytester):
-        assert request_dist(pytester.parseconfig("-d")) is Dist.LOAD
-
-    def test_a_mode_set_in_addopts_is_seen(self, pytester):
-        """addopts never reaches invocation_params, which holds the command line."""
-        pytester.makeini(
+    def test_the_scheduler_follows_the_chosen_character(self, pytester):
+        """source_of splits on it, so a wrong delimiter misroutes every test."""
+        for name in ("alice", "bob"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile(
             """
-            [pytest]
-            addopts = --dist no
+            import pytest
+
+            @pytest.mark.parametrize("n", [1, 2])
+            def test_x(source, n): ...
             """
         )
-        assert request_dist(pytester.parseconfig()) is Dist.NO
 
-    def test_a_missing_dist_option_reads_as_unset(self, pytester):
-        """--dist does not exist when xdist is disabled with -p no:xdist."""
-        assert request_dist(pytester.parseconfig("-p", "no:xdist")) is None
+        result = pytester.runpytest("--sources", "submissions/*", "--sources-delimiter=@", "-n", "2", "-v")
+
+        result.assert_outcomes(passed=4)
+
+    def test_a_real_run_settles_it_before_the_sources_are_validated(self, pytester):
+        """xdist asks for a worker count during pytest_cmdline_main, which
+        validates the sources, all before any pytest_configure runs."""
+        for name in ("alice+extra", "bob-2"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile("def test_x(source): ...")
+
+        result = pytester.runpytest("--sources", "submissions/*", "--sources-delimiter=@")
+
+        result.assert_outcomes(passed=2)
 
 
 class TestDistMode:

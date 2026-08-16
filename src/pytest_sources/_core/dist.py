@@ -1,10 +1,11 @@
-from collections.abc import Callable, Generator, Iterator
+import os
+from collections.abc import Callable, Iterator
 from enum import StrEnum
 
 import pytest
 from xdist.scheduler import LoadFileScheduling, LoadGroupScheduling, LoadScopeScheduling
 
-from pytest_sources._workers import _is_worker
+from pytest_sources._core.discover import resolve
 
 
 class Dist(StrEnum):
@@ -28,17 +29,15 @@ INCOMPATIBLE = (Dist.EACH, Dist.WORKSTEAL)
 REQUESTED_DIST = pytest.StashKey[Dist | None]()
 
 
-# tryfirst so the mode is settled and checked before _workers reads the worker count.
-@pytest.hookimpl(wrapper=True, tryfirst=True)
-def pytest_cmdline_main(config: pytest.Config) -> Generator[None, object, object]:
+def settle(config: pytest.Config) -> None:
     """
     Settle what the user asked --dist for, while the answer is still legible.
 
     xdist's own pytest_cmdline_main rewrites "no" to "load" as soon as a worker
     count exists, and nothing downstream can tell the two apart afterwards.
     """
-    # The globs rather than the resolved sources, because resolving validates them
-    # against the delimiter and _nodeid has not settled that yet.
+    # The globs rather than the resolved sources: a --dist conflict should be
+    # reported even when the globs are bad, and resolving changes nothing here.
     if not _is_worker(config) and (config.getoption("sources") or config.getini("sources")):
         mode = request_dist(config)
         config.stash[REQUESTED_DIST] = mode
@@ -47,7 +46,15 @@ def pytest_cmdline_main(config: pytest.Config) -> Generator[None, object, object
         # Do not distribute.
         if mode is Dist.NO and getattr(config.option, "numprocesses", None) is None:
             config.option.numprocesses = 0
-    return (yield)
+
+
+def imply_worker_count(config: pytest.Config) -> None:
+    """
+    Give every source its own process unless the user asked for otherwise.
+    """
+    unset = getattr(config.option, "numprocesses", None) is None
+    if unset and not _is_worker(config) and resolve(config):
+        config.option.numprocesses = "auto"
 
 
 def _reject_conflicts(config: pytest.Config, mode: Dist | None) -> None:
@@ -86,3 +93,14 @@ def request_dist(config: pytest.Config) -> Dist | None:
 def _given(config: pytest.Config) -> Iterator[str]:
     yield from config.invocation_params.args
     yield from config.getini("addopts")
+
+
+def _is_worker(config: pytest.Config) -> bool:
+    """
+    Whether this process is running tests on behalf of a controller.
+
+    Not xdist.is_xdist_worker, which takes a request or session and only looks at
+    config.workerinput. PYTEST_XDIST_WORKER is exported before a worker builds its
+    config and is inherited by anything it starts, so this holds at any depth.
+    """
+    return "PYTEST_XDIST_WORKER" in os.environ or hasattr(config, "workerinput")

@@ -7,10 +7,9 @@ from xdist.remote import Producer
 from xdist.scheduler.loadscope import LoadScopeScheduling
 from xdist.workermanage import WorkerController
 
-from pytest_sources._discover import resolve
-from pytest_sources._dist import REQUESTED_DIST, WITHIN, Dist
-from pytest_sources._nodeid import delimiter, source_of
-from pytest_sources._stash import SOURCES
+from pytest_sources._core.discover import SOURCES
+from pytest_sources._core.dist import REQUESTED_DIST, WITHIN, Dist
+from pytest_sources._core.nodeid import delimiter, source_of
 
 
 class SourceScheduling(LoadScopeScheduling):
@@ -107,15 +106,7 @@ class SourceScheduling(LoadScopeScheduling):
         return scopes
 
 
-@pytest.hookimpl
-def pytest_xdist_make_scheduler(config: pytest.Config, log: Producer) -> SourceScheduling | None:
-    if not resolve(config):
-        return None
-    return SourceScheduling(config, log)
-
-
-@pytest.hookimpl
-def pytest_testnodedown(node: WorkerController, error: object | None) -> None:
+def start_replacement(node: WorkerController, error: object | None) -> None:
     """
     Start a fresh process for the next work item.
 

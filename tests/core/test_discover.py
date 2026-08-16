@@ -2,10 +2,7 @@ import re
 
 import pytest
 
-from pytest_sources import source as source_module
-from pytest_sources._discover import discover, resolve
-from pytest_sources._nodeid import DEFAULT
-from pytest_sources._stash import SOURCES
+from pytest_sources._core.discover import SOURCES, discover, resolve
 
 
 @pytest.fixture
@@ -33,96 +30,6 @@ def submission_dirs(pytester):
 
 def relative(paths, root):
     return [str(p.relative_to(root)) for p in paths]
-
-
-class TestSourcesOption:
-    """Declaring --sources and the sources ini key."""
-
-    def test_defaults_to_no_globs(self, pytester):
-        assert pytester.parseconfig().getoption("sources") == []
-
-    def test_accepts_a_glob_verbatim(self, pytester):
-        config = pytester.parseconfig("--sources", "submissions/*")
-        assert config.getoption("sources") == ["submissions/*"]
-
-    def test_is_repeatable(self, pytester):
-        config = pytester.parseconfig("--sources", "submissions/*", "--sources", "other/*")
-        assert config.getoption("sources") == ["submissions/*", "other/*"]
-
-    def test_reads_globs_from_ini(self, pytester):
-        pytester.makeini("[pytest]\nsources = submissions/* other/*\n")
-        assert list(pytester.parseconfig().getini("sources")) == ["submissions/*", "other/*"]
-
-    def test_appears_in_help_under_its_own_group(self, pytester):
-        result = pytester.runpytest("--help")
-        result.stdout.fnmatch_lines(["sources:", "*--sources=GLOB*"])
-
-    def test_configure_stashes_discovered_directories(self, submission_dirs):
-        config = submission_dirs.parseconfigure("--sources", "submissions/*")
-        assert [source.path for source in config.stash[SOURCES]] == [
-            submission_dirs.path / "submissions" / "alice",
-            submission_dirs.path / "submissions" / "bob",
-        ]
-
-    def test_configure_stashes_directories_from_ini(self, submission_dirs):
-        submission_dirs.makeini("[pytest]\nsources = submissions/*\n")
-        config = submission_dirs.parseconfigure()
-        assert [source.path for source in config.stash[SOURCES]] == [
-            submission_dirs.path / "submissions" / "alice",
-            submission_dirs.path / "submissions" / "bob",
-        ]
-
-    def test_configure_stashes_root_relative_ids(self, submission_dirs):
-        config = submission_dirs.parseconfigure("--sources", "submissions/*")
-        assert [source.id for source in config.stash[SOURCES]] == [
-            "submissions/alice",
-            "submissions/bob",
-        ]
-
-    def test_command_line_overrides_ini(self, submission_dirs):
-        submission_dirs.makeini("[pytest]\nsources = submissions/*\n")
-        config = submission_dirs.parseconfigure("--sources", "submissions/alice")
-        assert [source.path for source in config.stash[SOURCES]] == [submission_dirs.path / "submissions" / "alice"]
-
-    def test_nothing_is_stashed_without_sources(self, submission_dirs):
-        assert SOURCES not in submission_dirs.parseconfigure().stash
-
-    def test_glob_matching_nothing_is_a_usage_error(self, submission_dirs):
-        with pytest.raises(pytest.UsageError, match=re.escape("matched nothing: 'nope/*'")):
-            submission_dirs.parseconfigure("--sources", "nope/*")
-
-    def test_markers_are_registered(self, pytester):
-        result = pytester.runpytest("--markers")
-        result.stdout.fnmatch_lines(["@pytest.mark.sources*", "@pytest.mark.no_sources*"])
-
-    def test_a_source_containing_the_delimiter_is_rejected(self, pytester):
-        (pytester.path / "submissions" / f"a{DEFAULT}b").mkdir(parents=True)
-
-        with pytest.raises(pytest.UsageError, match="may not appear in a source path"):
-            pytester.parseconfigure("--sources", "submissions/*")
-
-    def test_the_sources_marker_rejects_the_delimiter_too(self, pytester):
-        (pytester.path / "submissions" / f"a{DEFAULT}b").mkdir(parents=True)
-        pytester.makepyfile(
-            """
-            import pytest
-
-            @pytest.mark.sources("submissions/*")
-            def test_x(source): ...
-            """
-        )
-
-        result = pytester.runpytest()
-        result.stdout.fnmatch_lines(["*may not appear in a source path*"])
-        assert result.ret != 0
-
-    def test_sources_sharing_an_id_are_rejected(self, pytester, monkeypatch):
-        monkeypatch.setattr(source_module, "_relative_id", lambda path, root: path.name)
-        for parent in ("submissions", "other"):
-            (pytester.path / parent / "alice").mkdir(parents=True)
-
-        with pytest.raises(pytest.UsageError, match="must have distinct ids"):
-            pytester.parseconfigure("--sources", "submissions/*", "--sources", "other/*")
 
 
 class TestResolve:
@@ -173,7 +80,7 @@ class TestResolve:
         first = resolve(config)
 
         monkeypatch.setattr(
-            "pytest_sources._discover.discover",
+            "pytest_sources._core.discover.discover",
             lambda *args: pytest.fail("discover called a second time"),
         )
 

@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from pytest_sources import source as source_module
-from pytest_sources.source import Source, SourceImportError, make_sources, source_for
+from pytest_sources._core import source as source_module
+from pytest_sources._core.source import Source, SourceImportError, make_sources, source_for
 
 
 @pytest.fixture(autouse=True)

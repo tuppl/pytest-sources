@@ -1,9 +1,6 @@
-import types
 from collections import Counter
 
 import pytest
-
-from pytest_sources._schedule import SourceScheduling, pytest_testnodedown
 
 
 def worker_assignments(result):
@@ -337,64 +334,3 @@ class TestLoadGroup:
         result = grouped.runpytest("--sources", "submissions/*", "--dist", "loadgroup", "-n", "2")
 
         result.stdout.fnmatch_lines(["submissions/alice*4*0*0*"])
-
-
-def fake_node(dsession):
-    plugin_manager = types.SimpleNamespace(getplugin=lambda name: dsession)
-    return types.SimpleNamespace(config=types.SimpleNamespace(pluginmanager=plugin_manager))
-
-
-def fake_dsession(*, queued=True, shuttingdown=False, clone=None):
-    scheduler = SourceScheduling.__new__(SourceScheduling)
-    scheduler.workqueue = {"submissions/bob": {}} if queued else {}
-    dsession = types.SimpleNamespace(sched=scheduler, shuttingdown=shuttingdown)
-    if clone is not None:
-        dsession._clone_node = clone
-    return dsession
-
-
-class TestWorkerReplacement:
-    """Starting a fresh process for the next work item, and coping without one.
-
-    _clone_node is private to xdist. Losing it means a worker runs more than one
-    source, which is worth a warning rather than an aborted run.
-    """
-
-    def test_a_finished_node_is_replaced(self):
-        cloned = []
-        node = fake_node(fake_dsession(clone=cloned.append))
-
-        pytest_testnodedown(node, None)
-
-        assert cloned == [node]
-
-    def test_a_missing_clone_warns_instead_of_failing(self):
-        node = fake_node(fake_dsession())
-
-        with pytest.warns(pytest.PytestWarning, match="cannot restart workers"):
-            pytest_testnodedown(node, None)
-
-    def test_a_crashed_node_is_left_to_xdist(self):
-        """xdist replaces it against --max-worker-restart; cloning too gives it two."""
-        cloned = []
-        node = fake_node(fake_dsession(clone=cloned.append))
-
-        pytest_testnodedown(node, RuntimeError("boom"))
-
-        assert cloned == []
-
-    def test_nothing_is_started_once_the_session_is_shutting_down(self):
-        cloned = []
-        node = fake_node(fake_dsession(clone=cloned.append, shuttingdown=True))
-
-        pytest_testnodedown(node, None)
-
-        assert cloned == []
-
-    def test_nothing_is_started_with_an_empty_queue(self):
-        cloned = []
-        node = fake_node(fake_dsession(clone=cloned.append, queued=False))
-
-        pytest_testnodedown(node, None)
-
-        assert cloned == []

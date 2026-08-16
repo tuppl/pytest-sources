@@ -3,8 +3,8 @@ from enum import StrEnum
 
 import pytest
 
-from pytest_sources._discover import resolve
-from pytest_sources._nodeid import delimiter, drop_group, source_of
+from pytest_sources._core.discover import resolve
+from pytest_sources._core.nodeid import delimiter, drop_group, source_of
 
 
 class Summary(StrEnum):
@@ -36,36 +36,6 @@ CHARACTERS = {
     Outcome.XPASSED: "X",
 }
 MISSING = "-"
-
-
-@pytest.hookimpl
-def pytest_addoption(parser: pytest.Parser) -> None:
-    group = parser.getgroup("sources")
-    group.addoption(
-        "--sources-summary",
-        dest="sources_summary",
-        choices=list(Summary),
-        default=Summary.COUNTS,
-        help=(
-            "Summary printed after the run. counts: a row per source with outcome "
-            "totals. sources: a row per source, a column per test. tests: a row per "
-            "test, a column per source. none: no summary."
-        ),
-    )
-
-
-@pytest.hookimpl
-def pytest_configure(config: pytest.Config) -> None:
-    # Workers report to the controller, which is where the totals are wanted.
-    if hasattr(config, "workerinput"):
-        return
-    # Nothing ran, so a table of zeroes would only be misleading.
-    if config.getoption("collectonly", False):
-        return
-    if Summary(config.getoption("sources_summary")) is Summary.NONE:
-        return
-    if resolve(config):
-        config.pluginmanager.register(SourceSummary(config), "pytest_sources_summary")
 
 
 class SourceSummary:

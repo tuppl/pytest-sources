@@ -2,12 +2,15 @@ from collections.abc import Iterator
 
 import pytest
 
-from pytest_sources.source import source_for
+from pytest_sources._core.source import Source, source_for
 
 
-@pytest.hookimpl
-def pytest_configure(config: pytest.Config) -> None:
-    config.addinivalue_line("markers", "no_chdir: keep the working directory pytest was started in")
+@pytest.fixture(scope="session")
+def source(request: pytest.FixtureRequest) -> Source:
+    source = getattr(request, "param", None)
+    if source is None:
+        pytest.skip("no sources configured; pass --sources GLOB")
+    return source
 
 
 @pytest.fixture(autouse=True)

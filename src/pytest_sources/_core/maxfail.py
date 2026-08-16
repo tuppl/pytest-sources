@@ -2,31 +2,8 @@ from collections import Counter
 
 import pytest
 
-from pytest_sources._discover import resolve
-from pytest_sources._nodeid import source_of
-
-
-@pytest.hookimpl
-def pytest_addoption(parser: pytest.Parser) -> None:
-    group = parser.getgroup("sources")
-    group.addoption(
-        "--sources-maxfail",
-        dest="sources_maxfail",
-        type=int,
-        default=0,
-        metavar="N",
-        help=(
-            "Stop running a source once N of its tests have failed. Other sources "
-            "carry on, unlike --maxfail which ends the run. 0 disables."
-        ),
-    )
-
-
-@pytest.hookimpl
-def pytest_configure(config: pytest.Config) -> None:
-    # Registered in workers too, since that is where the tests run.
-    if config.getoption("sources_maxfail") > 0 and resolve(config):
-        config.pluginmanager.register(SourceMaxfail(config), "pytest_sources_maxfail")
+from pytest_sources._core.discover import resolve
+from pytest_sources._core.nodeid import source_of
 
 
 class SourceMaxfail:

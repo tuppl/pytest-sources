@@ -1,19 +1,15 @@
-"""How the bracket of a fanned-out nodeid is built.
+"""How the bracket of a fanned-out nodeid is built, and reading it back.
 
 pytest joins parameter ids with "-", which is also legal in a directory name.
-_nodeid replaces that separator with "+" while sources are in use, and _option
-refuses sources containing it, so the source is always everything before the
-first "+".
-
-Covers how the bracket is written, and source_of reading it back.
-
-    uv run pytest tests/test_nodeid.py -v
+nodeid replaces that separator with "+" while sources are in use, and source
+validation refuses sources containing it, so the source is always everything
+before the first "+".
 """
 
 import pytest
 
-from pytest_sources import _nodeid
-from pytest_sources._nodeid import DEFAULT, UNFANNED, source_of
+from pytest_sources._core import nodeid as _nodeid
+from pytest_sources._core.nodeid import UNFANNED, source_of
 
 SOURCE_IDS = {
     "submissions/alice",
@@ -146,58 +142,6 @@ class TestIdConstruction:
         assert nodeid.endswith("[1+fast]")
 
 
-class TestPatching:
-    """Replacing pytest's separator, and putting it back."""
-
-    def test_ids_are_untouched_without_sources(self, pytester):
-        pytester.makepyfile(
-            """
-            import pytest
-
-            @pytest.mark.parametrize("mode", ["fast"])
-            @pytest.mark.parametrize("n", [1])
-            def test_x(n, mode): ...
-            """
-        )
-
-        (nodeid,) = collect(pytester)
-        assert nodeid.endswith("[1-fast]")
-
-    def test_sources_from_the_ini_file_also_change_the_delimiter(self, pytester):
-        make_sources(pytester, "alice")
-        pytester.makeini("[pytest]\nsources = submissions/*\n")
-        pytester.makepyfile(
-            """
-            import pytest
-
-            @pytest.mark.parametrize("n", [1])
-            def test_x(source, n): ...
-            """
-        )
-
-        (nodeid,) = collect(pytester)
-        assert nodeid.endswith("[submissions/alice+1]")
-
-    def test_a_source_containing_the_delimiter_is_rejected(self, pytester):
-        (pytester.path / "submissions" / f"a{DEFAULT}b").mkdir(parents=True)
-
-        with pytest.raises(pytest.UsageError, match="may not appear in a source path"):
-            pytester.parseconfigure("--sources", "submissions/*")
-
-    def test_the_original_delimiter_is_restored_on_unconfigure(self, pytester):
-        """Nested in-process runs must not leak the patch into the outer session."""
-        from _pytest.python import CallSpec2
-
-        before = CallSpec2.id
-
-        make_sources(pytester, "alice")
-        pytester.makepyfile("def test_x(source): ...")
-        collect_sources(pytester)
-
-        assert CallSpec2.id is before
-        assert CallSpec2(params={}, indices={}, _arg2scope={}, _idlist=["a", "b"]).id == "a-b"
-
-
 class TestSourceOf:
     """Reading a source back out of a nodeid."""
 
@@ -295,112 +239,3 @@ class TestMovedInternals:
         (nodeid,) = collect_sources(pytester)
 
         assert nodeid.endswith("[submissions/alice-1]")
-
-
-class TestDelimiterOption:
-    """Choosing the character that separates parameters in a test id."""
-
-    def test_defaults_to_plus(self, pytester):
-        make_sources(pytester, "alice")
-        pytester.makepyfile(
-            """
-            import pytest
-
-            @pytest.mark.parametrize("n", [1])
-            def test_x(source, n): ...
-            """
-        )
-
-        (nodeid,) = collect_sources(pytester)
-        assert nodeid.endswith("[submissions/alice+1]")
-
-    def test_the_option_chooses_it(self, pytester):
-        make_sources(pytester, "alice")
-        pytester.makepyfile(
-            """
-            import pytest
-
-            @pytest.mark.parametrize("n", [1])
-            def test_x(source, n): ...
-            """
-        )
-
-        (nodeid,) = collect(pytester, "--sources", "submissions/*", "--sources-delimiter=@")
-        assert nodeid.endswith("[submissions/alice@1]")
-
-    def test_the_ini_chooses_it(self, pytester):
-        make_sources(pytester, "alice")
-        pytester.makeini("[pytest]\nsources_delimiter = @\n")
-        pytester.makepyfile(
-            """
-            import pytest
-
-            @pytest.mark.parametrize("n", [1])
-            def test_x(source, n): ...
-            """
-        )
-
-        (nodeid,) = collect(pytester, "--sources", "submissions/*")
-        assert nodeid.endswith("[submissions/alice@1]")
-
-    def test_the_option_beats_the_ini(self, pytester):
-        make_sources(pytester, "alice")
-        pytester.makeini("[pytest]\nsources_delimiter = @\n")
-        pytester.makepyfile(
-            """
-            import pytest
-
-            @pytest.mark.parametrize("n", [1])
-            def test_x(source, n): ...
-            """
-        )
-
-        (nodeid,) = collect(pytester, "--sources", "submissions/*", "--sources-delimiter=%")
-        assert nodeid.endswith("[submissions/alice%1]")
-
-    def test_a_source_containing_the_chosen_character_is_rejected(self, pytester):
-        (pytester.path / "submissions" / "a@b").mkdir(parents=True)
-
-        with pytest.raises(pytest.UsageError, match="may not appear in a source path"):
-            pytester.parseconfigure("--sources", "submissions/*", "--sources-delimiter=@")
-
-    def test_the_default_character_is_free_once_another_is_chosen(self, pytester):
-        (pytester.path / "submissions" / f"a{DEFAULT}b").mkdir(parents=True)
-        pytester.makepyfile("def test_x(source): ...")
-
-        result = pytester.runpytest("--sources", "submissions/*", "--sources-delimiter=@", "-n", "0")
-
-        result.assert_outcomes(passed=1)
-
-    @pytest.mark.parametrize("bad", ["", "++", "[", "]", "é"])
-    def test_an_unusable_character_is_rejected(self, pytester, bad):
-        with pytest.raises(pytest.UsageError):
-            pytester.parseconfigure(f"--sources-delimiter={bad}")
-
-    def test_the_scheduler_follows_the_chosen_character(self, pytester):
-        """source_of splits on it, so a wrong delimiter misroutes every test."""
-        for name in ("alice", "bob"):
-            (pytester.path / "submissions" / name).mkdir(parents=True)
-        pytester.makepyfile(
-            """
-            import pytest
-
-            @pytest.mark.parametrize("n", [1, 2])
-            def test_x(source, n): ...
-            """
-        )
-
-        result = pytester.runpytest("--sources", "submissions/*", "--sources-delimiter=@", "-n", "2", "-v")
-
-        result.assert_outcomes(passed=4)
-
-    def test_a_real_run_settles_it_before_the_sources_are_validated(self, pytester):
-        """xdist asks for a worker count during pytest_cmdline_main, which
-        validates the sources, all before any pytest_configure runs."""
-        for name in ("alice+extra", "bob-2"):
-            (pytester.path / "submissions" / name).mkdir(parents=True)
-        pytester.makepyfile("def test_x(source): ...")
-
-        result = pytester.runpytest("--sources", "submissions/*", "--sources-delimiter=@")
-
-        result.assert_outcomes(passed=2)
