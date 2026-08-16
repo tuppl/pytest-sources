@@ -233,7 +233,7 @@ class TestSourcesMarkerNarrows:
 class TestSourcesMarker:
     """Naming a test's sources instead of taking the run's."""
 
-    def test_sources_marker_replaces_the_command_line_set(self, submissions):
+    def test_sources_marker_narrows_the_command_line_set(self, submissions):
         submissions.makepyfile(
             """
             import pytest

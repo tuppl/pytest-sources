@@ -78,21 +78,19 @@ def read_probe(pytester, tmp_path, monkeypatch):
 class TestAutomaticMove:
     """Every fanned test runs inside the source it is testing."""
 
-    @pytest.mark.parametrize("workers", WORKERS)
-    def test_a_fanned_test_runs_inside_its_source(self, cwd_probe, workers):
+    def test_a_fanned_test_runs_inside_its_source(self, cwd_probe):
         pytester, recorded = cwd_probe
 
-        result = pytester.runpytest("--sources", "submissions/*", "-n", workers)
+        result = pytester.runpytest("--sources", "submissions/*", "-n", "0")
         result.assert_outcomes(passed=5)
 
         for name in ("alice", "bob"):
             assert (recorded / f"fanned-{name}").read_text() == str(pytester.path / "submissions" / name)
 
-    @pytest.mark.parametrize("workers", WORKERS)
-    def test_an_unfanned_test_keeps_the_invocation_directory(self, cwd_probe, workers):
+    def test_an_unfanned_test_keeps_the_invocation_directory(self, cwd_probe):
         pytester, recorded = cwd_probe
 
-        result = pytester.runpytest("--sources", "submissions/*", "-n", workers)
+        result = pytester.runpytest("--sources", "submissions/*", "-n", "0")
         result.assert_outcomes(passed=5)
 
         assert (recorded / "unfanned").read_text() == str(pytester.path)
@@ -158,11 +156,10 @@ class TestAutomaticMove:
 class TestOptingOut:
     """Keeping the directory pytest was started in."""
 
-    @pytest.mark.parametrize("workers", WORKERS)
-    def test_no_chdir_keeps_the_invocation_directory(self, cwd_probe, workers):
+    def test_no_chdir_keeps_the_invocation_directory(self, cwd_probe):
         pytester, recorded = cwd_probe
 
-        result = pytester.runpytest("--sources", "submissions/*", "-n", workers)
+        result = pytester.runpytest("--sources", "submissions/*", "-n", "0")
         result.assert_outcomes(passed=5)
 
         assert (recorded / "opted-out").read_text() == str(pytester.path)

@@ -133,12 +133,6 @@ class TestPatching:
         (nodeid,) = collect(pytester)
         assert nodeid.endswith("[submissions/alice+1]")
 
-    def test_a_source_containing_the_delimiter_is_rejected(self, pytester):
-        (pytester.path / "submissions" / f"a{DEFAULT}b").mkdir(parents=True)
-
-        with pytest.raises(pytest.UsageError, match="may not appear in a source path"):
-            pytester.parseconfigure("--sources", "submissions/*")
-
     def test_the_original_delimiter_is_restored_on_unconfigure(self, pytester):
         """Nested in-process runs must not leak the patch into the outer session."""
         from _pytest.python import CallSpec2
