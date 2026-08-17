@@ -73,7 +73,7 @@ class TestConfigure:
         )
 
         result = pytester.runpytest()
-        result.stdout.fnmatch_lines(["*may not appear in a source path*"])
+        result.stderr.fnmatch_lines(["*may not appear in a source path*"])
         assert result.ret != 0
 
     def test_sources_sharing_an_id_are_rejected(self, pytester, monkeypatch):

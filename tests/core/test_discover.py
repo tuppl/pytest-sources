@@ -167,8 +167,8 @@ class TestDiscover:
 class TestUniverse:
     """Every source the run may touch, with and without the marker scan."""
 
-    def test_without_the_scan_the_universe_is_the_declared_set(self, submission_dirs):
-        config = submission_dirs.parseconfigure("--sources", "submissions/*")
+    def test_with_the_scan_off_the_universe_is_the_declared_set(self, submission_dirs):
+        config = submission_dirs.parseconfigure("--sources", "submissions/*", "--no-sources-scan")
         assert universe(config) == resolve(config)
 
     def test_the_scan_adds_marker_sources(self, submission_dirs):
@@ -182,7 +182,7 @@ class TestUniverse:
             """
         )
 
-        config = submission_dirs.parseconfigure("--sources", "submissions/*", "--sources-scan")
+        config = submission_dirs.parseconfigure("--sources", "submissions/*")
 
         assert [source.id for source in universe(config)] == [
             "submissions/alice",
@@ -200,6 +200,6 @@ class TestUniverse:
             """
         )
 
-        config = submission_dirs.parseconfigure("--sources", "submissions/*", "--sources-scan")
+        config = submission_dirs.parseconfigure("--sources", "submissions/*")
 
         assert [source.id for source in universe(config)] == ["submissions/alice", "submissions/bob"]

@@ -96,6 +96,6 @@ class TestMarkerOnlyBudget:
             """
         )
 
-        result = pytester.runpytest("--sources-scan", "--sources-maxfail=1", "-n", "2")
+        result = pytester.runpytest("--sources-maxfail=1", "-n", "2")
 
         result.assert_outcomes(passed=3, failed=1, skipped=2)

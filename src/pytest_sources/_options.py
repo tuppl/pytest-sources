@@ -29,16 +29,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addini("sources_delimiter", default=DEFAULT, help="Default --sources-delimiter")
 
     group.addoption(
-        "--sources-scan",
+        "--no-sources-scan",
         dest="sources_scan",
-        action="store_true",
-        default=False,
+        action="store_false",
+        default=None,
         help=(
-            "Collect once before the run to find sources named only by markers, so "
-            "they get their own process, summary row and failure budget."
+            "Skip the collection pass that finds sources named only by markers. "
+            "Marker-only sources then share worker processes and get no summary "
+            "row or failure budget."
         ),
     )
-    parser.addini("sources_scan", type="bool", default=False, help="Default --sources-scan")
+    parser.addini("sources_scan", type="bool", default=True, help="Whether to scan for marker sources")
 
     group.addoption(
         "--sources-maxfail",

@@ -358,7 +358,7 @@ class TestMarkerOnlyScheduling:
             """
         )
 
-        result = pytester.runpytest("--sources-scan", "-n", "2")
+        result = pytester.runpytest("-n", "2")
 
         result.assert_outcomes(passed=4)
         pids = {path.name: path.read_text() for path in tmp_path.iterdir()}

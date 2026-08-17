@@ -44,9 +44,7 @@ class TestFanout:
 
     def test_ids_are_root_relative(self, submissions):
         submissions.makepyfile("def test_x(source): pass")
-        result = submissions.runpytest(
-            "--sources", "submissions/*", "--sources-scan", "-n", "0", "--collect-only", "-q"
-        )
+        result = submissions.runpytest("--sources", "submissions/*", "-n", "0", "--collect-only", "-q")
         assert "test_x[submissions/alice]" in result.stdout.str()
         assert "test_x[submissions/bob]" in result.stdout.str()
 
@@ -227,9 +225,7 @@ class TestSourcesMarker:
             def test_x(source): pass
             """
         )
-        result = submissions.runpytest(
-            "--sources", "submissions/*", "--sources-scan", "-n", "0", "--collect-only", "-q"
-        )
+        result = submissions.runpytest("--sources", "submissions/*", "-n", "0", "--collect-only", "-q")
         assert "test_x[submissions/alice]" in result.stdout.str()
         assert "submissions/bob" not in result.stdout.str()
 
@@ -334,7 +330,7 @@ class TestSelection:
 
 
 class TestSourcesScan:
-    """--sources-scan: markers may add sources beyond the declared set."""
+    """The marker scan makes undeclared marker sources first-class, by default."""
 
     def test_an_undeclared_marker_source_is_accepted(self, submissions):
         (submissions.path / "refs" / "model").mkdir(parents=True)
@@ -348,7 +344,7 @@ class TestSourcesScan:
             """
         )
 
-        result = submissions.runpytest("--sources", "submissions/*", "--sources-scan", "-n", "0")
+        result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
 
         result.assert_outcomes(passed=1)
 
@@ -366,9 +362,7 @@ class TestSourcesScan:
             """
         )
 
-        result = submissions.runpytest(
-            "--sources", "submissions/*", "--sources-scan", "-n", "0", "--collect-only", "-q"
-        )
+        result = submissions.runpytest("--sources", "submissions/*", "-n", "0", "--collect-only", "-q")
 
         stdout = result.stdout.str()
         assert "test_everyone[submissions/alice]" in stdout
@@ -386,12 +380,12 @@ class TestSourcesScan:
             """
         )
 
-        result = submissions.runpytest("--sources", "submissions/*", "--sources-scan", "-n", "0")
+        result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
 
         result.stdout.fnmatch_lines(["refs/model*1*0*0*"])
 
-    def test_the_ini_turns_the_scan_on(self, submissions):
-        submissions.makeini("[pytest]\nsources_scan = true\n")
+    def test_the_flag_turns_the_scan_off(self, submissions):
+        """Without the scan a marker-only source loses its summary row."""
         submissions.makepyfile(
             """
             import pytest
@@ -401,6 +395,7 @@ class TestSourcesScan:
             """
         )
 
-        result = submissions.runpytest("-n", "0")
+        result = submissions.runpytest("-n", "0", "--no-sources-scan")
 
-        result.stdout.fnmatch_lines(["submissions/alice*1*0*0*"])
+        result.assert_outcomes(passed=2)
+        assert not any("= sources =" in line for line in result.outlines)

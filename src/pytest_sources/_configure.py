@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from pytest_sources._core import nodeid
-from pytest_sources._core.discover import UNIVERSE, resolve, scan_wanted, scanning, universe
+from pytest_sources._core.discover import UNIVERSE, resolve, scanning, universe
 from pytest_sources._core.maxfail import SourceMaxfail
 from pytest_sources._core.source import Source
 from pytest_sources._core.summary import SourceSummary, Summary
@@ -19,9 +19,6 @@ def pytest_configure(config: pytest.Config) -> None:
 
     nodeid.update_delimiter(config)
 
-    if config.getoption("sources") or config.getini("sources") or scan_wanted(config):
-        nodeid._patch()
-
     _register_markers(config)
 
     resolve(config)
@@ -33,6 +30,10 @@ def pytest_configure(config: pytest.Config) -> None:
         config.stash[UNIVERSE] = [Source(path=Path(path), id=id) for path, id in workerinput["sources_universe"]]
 
     sources = universe(config)
+
+    # Patch only for runs that fan out, so unrelated projects keep pytest's ids.
+    if sources:
+        nodeid._patch()
 
     # Registered in workers too, since that is where the tests run.
     if config.getoption("sources_maxfail") > 0 and sources:

@@ -6,15 +6,15 @@ from pytest_sources._core.nodeid import DEFAULT
 class TestSourcesOption:
     """Declaring --sources and the sources ini key."""
 
-    def test_scan_defaults_to_off(self, pytester):
+    def test_scan_defaults_to_on(self, pytester):
         config = pytester.parseconfig()
-        assert config.getoption("sources_scan") is False
-        assert config.getini("sources_scan") is False
+        assert config.getoption("sources_scan") is None
+        assert config.getini("sources_scan") is True
 
-    def test_scan_flag_and_ini(self, pytester):
-        assert pytester.parseconfig("--sources-scan").getoption("sources_scan") is True
-        pytester.makeini("[pytest]\nsources_scan = true\n")
-        assert pytester.parseconfig().getini("sources_scan") is True
+    def test_scan_flag_and_ini_turn_it_off(self, pytester):
+        assert pytester.parseconfig("--no-sources-scan").getoption("sources_scan") is False
+        pytester.makeini("[pytest]\nsources_scan = false\n")
+        assert pytester.parseconfig().getini("sources_scan") is False
 
     def test_defaults_to_no_globs(self, pytester):
         assert pytester.parseconfig().getoption("sources") == []

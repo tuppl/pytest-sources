@@ -244,7 +244,7 @@ def test_sources_decorator(source): ...
 
 `test_sources_decorator` does not run on every sources subdirectory but only on subdirectories that end with `_alt`.
 
-A marker may name sources outside `--sources`. Add `--sources-scan` (or `sources_scan = true` in the ini) and pytest-sources collects once before the run to find them, giving them their own process, summary row and failure budget like any declared source. Without the scan they still run, but share worker processes and appear in no summary. Unmarked tests always run against the declared set only.
+A marker may name sources outside `--sources`. pytest-sources collects once before the run to find them, so they get their own process, summary row and failure budget like any declared source. Skip that pass with `--no-sources-scan` (or `sources_scan = false` in the ini); marker-only sources then still run, but share worker processes and appear in no summary. Unmarked tests always run against the declared set only.
 
 To run a test with the normal pytesting behaviour i.e. only once regardless of `--sources`:
 
