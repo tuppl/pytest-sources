@@ -11,8 +11,6 @@ from pytest_sources._core.summary import SourceSummary, Summary
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_configure(config: pytest.Config) -> None:
-    # The scanning pass only reads markers; patching or registering anything
-    # would leak into the run that started it.
     if scanning():
         _register_markers(config)
         return
@@ -31,11 +29,9 @@ def pytest_configure(config: pytest.Config) -> None:
 
     sources = universe(config)
 
-    # Patch only for runs that fan out, so unrelated projects keep pytest's ids.
     if sources:
         nodeid._patch()
 
-    # Registered in workers too, since that is where the tests run.
     if config.getoption("sources_maxfail") > 0 and sources:
         config.pluginmanager.register(SourceMaxfail(config), "pytest_sources_maxfail")
 
