@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from pytest_sources._core.discover import SOURCES, discover, resolve
+from pytest_sources._core.discover import SOURCES, discover, resolve, universe
 
 
 @pytest.fixture
@@ -162,3 +162,44 @@ class TestDiscover:
     def test_one_bad_pattern_fails_the_whole_expansion(self, tree):
         with pytest.raises(pytest.UsageError):
             discover(["submissions/*", "nope/*"], tree)
+
+
+class TestUniverse:
+    """Every source the run may touch, with and without the marker scan."""
+
+    def test_without_the_scan_the_universe_is_the_declared_set(self, submission_dirs):
+        config = submission_dirs.parseconfigure("--sources", "submissions/*")
+        assert universe(config) == resolve(config)
+
+    def test_the_scan_adds_marker_sources(self, submission_dirs):
+        (submission_dirs.path / "refs" / "model").mkdir(parents=True)
+        submission_dirs.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.sources("refs/*")
+            def test_x(source): ...
+            """
+        )
+
+        config = submission_dirs.parseconfigure("--sources", "submissions/*", "--sources-scan")
+
+        assert [source.id for source in universe(config)] == [
+            "submissions/alice",
+            "submissions/bob",
+            "refs/model",
+        ]
+
+    def test_the_scan_deduplicates_declared_sources(self, submission_dirs):
+        submission_dirs.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.sources("submissions/alice")
+            def test_x(source): ...
+            """
+        )
+
+        config = submission_dirs.parseconfigure("--sources", "submissions/*", "--sources-scan")
+
+        assert [source.id for source in universe(config)] == ["submissions/alice", "submissions/bob"]

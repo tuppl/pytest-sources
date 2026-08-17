@@ -1,4 +1,7 @@
+import contextlib
 import glob
+import io
+import os
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -9,6 +12,11 @@ from pytest_sources._core.source import Source, make_sources
 
 SOURCES = pytest.StashKey[list[Source]]()
 MARKER_SOURCES = pytest.StashKey[dict[tuple[str, ...], list[Source]]]()
+UNIVERSE = pytest.StashKey[list[Source]]()
+
+SCAN_ENV = "PYTEST_SOURCES_SCAN"
+
+_harvest: list[tuple[str, ...]] | None = None
 
 
 def resolve(config: pytest.Config) -> list[Source]:
@@ -69,27 +77,77 @@ def parametrizes_source(definition: FunctionDefinition) -> bool:
 def _marker_sources(globs: tuple[str, ...], config: pytest.Config) -> list[Source]:
     cache = config.stash.setdefault(MARKER_SOURCES, {})
     if globs not in cache:
-        cache[globs] = _narrow(globs, config)
+        cache[globs] = make_sources(discover(globs, config.rootpath), config.rootpath)
     return cache[globs]
 
 
-def _narrow(globs: tuple[str, ...], config: pytest.Config) -> list[Source]:
+def universe(config: pytest.Config) -> list[Source]:
     """
-    Select the run's sources that the marker's globs match.
+    Every source the run may touch: the declared set, plus marker sources when
+    --sources-scan is on.
+
+    The scheduler, summary, failure budget and report all key off this, so it is
+    computed once and cached on the config.
     """
-    matched = make_sources(discover(globs, config.rootpath), config.rootpath)
+    if UNIVERSE in config.stash:
+        return config.stash[UNIVERSE]
+
     declared = resolve(config)
 
-    if not declared:
-        return matched
+    if not scan_wanted(config) or scanning() or is_worker(config):
+        return declared
 
-    paths = {source.path for source in declared}
-    undeclared = sorted(source.id for source in matched if source.path not in paths)
-    if undeclared:
-        raise pytest.UsageError(
-            f"sources marker matched sources that --sources did not: {', '.join(undeclared)}. "
-            f"Add them to --sources, or narrow the marker."
-        )
+    combined = {source.path: source for source in declared}
+    for globs in _scan(config):
+        for source in make_sources(discover(globs, config.rootpath), config.rootpath):
+            combined.setdefault(source.path, source)
 
-    matched_paths = {source.path for source in matched}
-    return [source for source in declared if source.path in matched_paths]
+    sources = list(combined.values())
+    config.stash[UNIVERSE] = sources
+    return sources
+
+
+def scan_wanted(config: pytest.Config) -> bool:
+    return bool(config.getoption("sources_scan") or config.getini("sources_scan"))
+
+
+def scanning() -> bool:
+    """Whether this process is the marker-scanning collection pass."""
+    return SCAN_ENV in os.environ
+
+
+def record_marker_globs(globs: tuple[str, ...]) -> None:
+    if _harvest is not None and globs not in _harvest:
+        _harvest.append(globs)
+
+
+def _scan(config: pytest.Config) -> list[tuple[str, ...]]:
+    """
+    Collect once, silently, to find the globs that sources markers carry.
+
+    Markers only become readable when collection imports the test modules, which
+    is too late for the machinery that needs the full source list up front.
+    """
+    global _harvest
+    arguments = [str(argument) for argument in config.invocation_params.args]
+    arguments += ["--collect-only", "-q"]
+    if "no:xdist" not in arguments:
+        arguments += ["-n", "0"]
+
+    _harvest = []
+    os.environ[SCAN_ENV] = "1"
+    sink = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
+            pytest.main(arguments)
+    finally:
+        del os.environ[SCAN_ENV]
+        harvested, _harvest = _harvest, None
+    return harvested
+
+
+def is_worker(config: pytest.Config) -> bool:
+    """
+    Whether this process is running tests on behalf of a controller.
+    """
+    return "PYTEST_XDIST_WORKER" in os.environ or hasattr(config, "workerinput")

@@ -2,7 +2,7 @@ from collections import Counter
 
 import pytest
 
-from pytest_sources._core.discover import resolve
+from pytest_sources._core.discover import universe
 from pytest_sources._core.nodeid import source_of
 
 
@@ -15,7 +15,7 @@ class SourceMaxfail:
 
     def __init__(self, config: pytest.Config) -> None:
         self._limit = config.getoption("sources_maxfail")
-        self._source_ids = {source.id for source in resolve(config)}
+        self._source_ids = {source.id for source in universe(config)}
         self._failures: Counter[str] = Counter()
 
     @pytest.hookimpl(tryfirst=True)

@@ -1,10 +1,16 @@
 import pytest
 
-from pytest_sources._core.discover import parametrizes_source, sources_for
+from pytest_sources._core.discover import parametrizes_source, record_marker_globs, scanning, sources_for
 
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
+    if scanning():
+        marker = metafunc.definition.get_closest_marker("sources")
+        if marker is not None and marker.args:
+            record_marker_globs(tuple(marker.args))
+        return
+
     if metafunc.definition.get_closest_marker("no_sources"):
         return
 

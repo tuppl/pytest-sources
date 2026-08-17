@@ -235,7 +235,7 @@ def test_output_matches_the_expected_file(source):
 
 ## Applying sources per test
 
-A test case can be narrowed to be parameterised on a subset of the provided sources:
+A test case can be parameterised on its own set of sources instead of the provided ones:
 
 ```python
 @pytest.mark.sources("sources/*_alt")
@@ -244,7 +244,7 @@ def test_sources_decorator(source): ...
 
 `test_sources_decorator` does not run on every sources subdirectory but only on subdirectories that end with `_alt`.
 
-A glob matching a directory that `--sources` did not provide is a usage error.
+A marker may name sources outside `--sources`. Add `--sources-scan` (or `sources_scan = true` in the ini) and pytest-sources collects once before the run to find them, giving them their own process, summary row and failure budget like any declared source. Without the scan they still run, but share worker processes and appear in no summary. Unmarked tests always run against the declared set only.
 
 To run a test with the normal pytesting behaviour i.e. only once regardless of `--sources`:
 

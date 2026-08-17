@@ -334,3 +334,34 @@ class TestLoadGroup:
         result = grouped.runpytest("--sources", "submissions/*", "--dist", "loadgroup", "-n", "2")
 
         result.stdout.fnmatch_lines(["submissions/alice*4*0*0*"])
+
+
+class TestMarkerOnlyScheduling:
+    """--sources-scan makes marker-only sources schedulable like declared ones."""
+
+    def test_marker_only_sources_get_their_own_process(self, pytester, tmp_path, monkeypatch):
+        monkeypatch.setenv("PIDDIR", str(tmp_path))
+        for name in ("alice", "bob"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile(
+            """
+            import os, pathlib
+            import pytest
+
+            pytestmark = pytest.mark.sources("submissions/*")
+
+            def test_a(source):
+                pathlib.Path(os.environ["PIDDIR"], f"{source.name}-a").write_text(str(os.getpid()))
+
+            def test_b(source):
+                pathlib.Path(os.environ["PIDDIR"], f"{source.name}-b").write_text(str(os.getpid()))
+            """
+        )
+
+        result = pytester.runpytest("--sources-scan", "-n", "2")
+
+        result.assert_outcomes(passed=4)
+        pids = {path.name: path.read_text() for path in tmp_path.iterdir()}
+        assert pids["alice-a"] == pids["alice-b"]
+        assert pids["bob-a"] == pids["bob-b"]
+        assert pids["alice-a"] != pids["bob-a"]

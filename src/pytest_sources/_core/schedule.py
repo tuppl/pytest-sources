@@ -7,7 +7,7 @@ from xdist.remote import Producer
 from xdist.scheduler.loadscope import LoadScopeScheduling
 from xdist.workermanage import WorkerController
 
-from pytest_sources._core.discover import SOURCES
+from pytest_sources._core.discover import universe
 from pytest_sources._core.dist import REQUESTED_DIST, WITHIN, Dist
 from pytest_sources._core.nodeid import delimiter, source_of
 
@@ -23,7 +23,7 @@ class SourceScheduling(LoadScopeScheduling):
     def __init__(self, config: pytest.Config, log: Producer | None = None) -> None:
         super().__init__(config, log)
         self.log = Producer("sourcesched") if log is None else log.sourcesched
-        self._source_ids = {source.id for source in config.stash[SOURCES]}
+        self._source_ids = {source.id for source in universe(config)}
         self._scopes: dict[str, str] | None = None
         self._served: set[WorkerController] = set()
 

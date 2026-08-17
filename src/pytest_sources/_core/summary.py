@@ -3,7 +3,7 @@ from enum import StrEnum
 
 import pytest
 
-from pytest_sources._core.discover import resolve
+from pytest_sources._core.discover import universe
 from pytest_sources._core.nodeid import delimiter, drop_group, source_of
 
 
@@ -42,7 +42,7 @@ class SourceSummary:
     """Record every outcome per source and print one of three views of it."""
 
     def __init__(self, config: pytest.Config) -> None:
-        self._sources = [source.id for source in resolve(config)]
+        self._sources = [source.id for source in universe(config)]
         self._source_ids = set(self._sources)
         self._style = Summary(config.getoption("sources_summary"))
         self._results: dict[str, dict[str, Outcome]] = {source: {} for source in self._sources}

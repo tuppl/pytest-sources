@@ -44,7 +44,9 @@ class TestFanout:
 
     def test_ids_are_root_relative(self, submissions):
         submissions.makepyfile("def test_x(source): pass")
-        result = submissions.runpytest("--sources", "submissions/*", "-n", "0", "--collect-only", "-q")
+        result = submissions.runpytest(
+            "--sources", "submissions/*", "--sources-scan", "-n", "0", "--collect-only", "-q"
+        )
         assert "test_x[submissions/alice]" in result.stdout.str()
         assert "test_x[submissions/bob]" in result.stdout.str()
 
@@ -144,43 +146,26 @@ class TestForeignSourceParam:
         result.assert_outcomes(passed=1)
 
 
-class TestSourcesMarkerNarrows:
+class TestSourcesMarkerUnion:
     """
-    The marker selects from the run's sources rather than adding to them.
+    The marker names a test's own sources, declared or not.
     """
 
-    def test_a_source_the_run_did_not_declare_is_refused(self, pytester):
-        for name in ("alice", "carol_alt"):
-            (pytester.path / "submissions" / name).mkdir(parents=True)
-        pytester.makepyfile(
+    def test_an_undeclared_marker_source_runs_without_any_flag(self, submissions):
+        (submissions.path / "refs" / "model").mkdir(parents=True)
+        submissions.makepyfile(
             """
             import pytest
 
-            @pytest.mark.sources("submissions/*_alt")
-            def test_x(source): ...
+            @pytest.mark.sources("refs/*")
+            def test_x(source):
+                assert source.name == "model"
             """
         )
 
-        result = pytester.runpytest("--sources", "submissions/alice", "-n", "0")
+        result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
 
-        assert result.ret != 0
-        result.stdout.fnmatch_lines(["*--sources did not: submissions/carol_alt*"])
-
-    def test_the_message_names_every_undeclared_source(self, pytester):
-        for name in ("alice", "carol_alt", "dave_alt"):
-            (pytester.path / "submissions" / name).mkdir(parents=True)
-        pytester.makepyfile(
-            """
-            import pytest
-
-            @pytest.mark.sources("submissions/*_alt")
-            def test_x(source): ...
-            """
-        )
-
-        result = pytester.runpytest("--sources", "submissions/alice", "-n", "0")
-
-        result.stdout.fnmatch_lines(["*submissions/carol_alt, submissions/dave_alt*"])
+        result.assert_outcomes(passed=1)
 
     def test_a_declared_subset_is_allowed(self, submissions):
         submissions.makepyfile(
@@ -194,8 +179,8 @@ class TestSourcesMarkerNarrows:
         result = submissions.runpytest("--sources", "submissions/*", "-n", "0")
         result.assert_outcomes(passed=1)
 
-    def test_a_narrowed_source_keeps_its_summary_row(self, submissions):
-        """The point of narrowing: the marker's source is one the summary knows."""
+    def test_a_declared_marker_source_keeps_its_summary_row(self, submissions):
+        """A declared marker source is one the summary knows."""
         submissions.makepyfile(
             """
             import pytest
@@ -209,7 +194,7 @@ class TestSourcesMarkerNarrows:
 
         result.stdout.fnmatch_lines(["submissions/alice*1*0*0*"])
 
-    def test_each_narrowed_source_still_gets_its_own_process(self, pytester, tmp_path, monkeypatch):
+    def test_each_declared_marker_source_gets_its_own_process(self, pytester, tmp_path, monkeypatch):
         monkeypatch.setenv("PIDDIR", str(tmp_path))
         for name in ("alice_alt", "bob_alt", "carol"):
             (pytester.path / "submissions" / name).mkdir(parents=True)
@@ -233,7 +218,7 @@ class TestSourcesMarkerNarrows:
 class TestSourcesMarker:
     """Naming a test's sources instead of taking the run's."""
 
-    def test_sources_marker_narrows_the_command_line_set(self, submissions):
+    def test_sources_marker_replaces_the_command_line_set(self, submissions):
         submissions.makepyfile(
             """
             import pytest
@@ -242,7 +227,9 @@ class TestSourcesMarker:
             def test_x(source): pass
             """
         )
-        result = submissions.runpytest("--sources", "submissions/*", "-n", "0", "--collect-only", "-q")
+        result = submissions.runpytest(
+            "--sources", "submissions/*", "--sources-scan", "-n", "0", "--collect-only", "-q"
+        )
         assert "test_x[submissions/alice]" in result.stdout.str()
         assert "submissions/bob" not in result.stdout.str()
 
@@ -257,6 +244,23 @@ class TestSourcesMarker:
         )
         result = submissions.runpytest()
         result.assert_outcomes(passed=2)
+
+    def test_the_marker_alone_works_under_workers(self, submissions):
+        submissions.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.sources("submissions/*")
+            @pytest.mark.parametrize("n", [1, 2, 3])
+            def test_value(source, n):
+                assert source.import_module("solution").VALUE == {"alice": 1, "bob": 2}[source.name]
+            """
+        )
+
+        result = submissions.runpytest("-n", "2", "-v")
+
+        result.assert_outcomes(passed=6)
+        result.stdout.fnmatch_lines(["*created: 2/2 workers*"])
 
     def test_the_sources_marker_takes_several_globs(self, pytester):
         for parent in ("submissions", "other"):
@@ -327,3 +331,76 @@ class TestSelection:
         # -n 0: workers deselect locally, so the controller reports no deselections.
         result = submissions.runpytest("--sources", "submissions/*", "-n", "0", "-k", "alice")
         result.assert_outcomes(passed=1, deselected=1)
+
+
+class TestSourcesScan:
+    """--sources-scan: markers may add sources beyond the declared set."""
+
+    def test_an_undeclared_marker_source_is_accepted(self, submissions):
+        (submissions.path / "refs" / "model").mkdir(parents=True)
+        submissions.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.sources("refs/*")
+            def test_x(source):
+                assert source.name == "model"
+            """
+        )
+
+        result = submissions.runpytest("--sources", "submissions/*", "--sources-scan", "-n", "0")
+
+        result.assert_outcomes(passed=1)
+
+    def test_unmarked_tests_stay_on_the_declared_set(self, submissions):
+        """The marker adds sources to the run, not to other tests' fanout."""
+        (submissions.path / "refs" / "model").mkdir(parents=True)
+        submissions.makepyfile(
+            """
+            import pytest
+
+            def test_everyone(source): ...
+
+            @pytest.mark.sources("refs/*")
+            def test_conformance(source): ...
+            """
+        )
+
+        result = submissions.runpytest(
+            "--sources", "submissions/*", "--sources-scan", "-n", "0", "--collect-only", "-q"
+        )
+
+        stdout = result.stdout.str()
+        assert "test_everyone[submissions/alice]" in stdout
+        assert "test_everyone[refs/model]" not in stdout
+        assert "test_conformance[refs/model]" in stdout
+
+    def test_a_marker_source_gets_a_summary_row(self, submissions):
+        (submissions.path / "refs" / "model").mkdir(parents=True)
+        submissions.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.sources("refs/*")
+            def test_x(source): ...
+            """
+        )
+
+        result = submissions.runpytest("--sources", "submissions/*", "--sources-scan", "-n", "0")
+
+        result.stdout.fnmatch_lines(["refs/model*1*0*0*"])
+
+    def test_the_ini_turns_the_scan_on(self, submissions):
+        submissions.makeini("[pytest]\nsources_scan = true\n")
+        submissions.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.sources("submissions/*")
+            def test_x(source): ...
+            """
+        )
+
+        result = submissions.runpytest("-n", "0")
+
+        result.stdout.fnmatch_lines(["submissions/alice*1*0*0*"])

@@ -29,6 +29,18 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addini("sources_delimiter", default=DEFAULT, help="Default --sources-delimiter")
 
     group.addoption(
+        "--sources-scan",
+        dest="sources_scan",
+        action="store_true",
+        default=False,
+        help=(
+            "Collect once before the run to find sources named only by markers, so "
+            "they get their own process, summary row and failure budget."
+        ),
+    )
+    parser.addini("sources_scan", type="bool", default=False, help="Default --sources-scan")
+
+    group.addoption(
         "--sources-maxfail",
         dest="sources_maxfail",
         type=int,

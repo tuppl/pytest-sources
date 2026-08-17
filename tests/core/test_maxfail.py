@@ -76,3 +76,26 @@ class TestWhatTheBudgetTouches:
         result = failing.runpytest("--sources", "submissions/*", "-n", "0", "--sources-maxfail=2", "-rs")
 
         result.stdout.fnmatch_lines(["*submissions/bob stopped after 2 failures*"])
+
+
+class TestMarkerOnlyBudget:
+    """--sources-scan gives marker-only sources a failure budget, in workers too."""
+
+    def test_the_budget_reaches_a_marker_source_under_workers(self, pytester):
+        for name in ("alice", "bob"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makepyfile(
+            """
+            import pytest
+
+            pytestmark = pytest.mark.sources("submissions/*")
+
+            def test_one(source): assert source.name == "alice"
+            def test_two(source): assert source.name == "alice"
+            def test_three(source): assert source.name == "alice"
+            """
+        )
+
+        result = pytester.runpytest("--sources-scan", "--sources-maxfail=1", "-n", "2")
+
+        result.assert_outcomes(passed=3, failed=1, skipped=2)

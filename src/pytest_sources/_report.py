@@ -1,12 +1,12 @@
 import pytest
 
-from pytest_sources._core.discover import resolve
+from pytest_sources._core.discover import universe
 from pytest_sources._core.dist import REQUESTED_DIST, WITHIN
 
 
 @pytest.hookimpl
 def pytest_report_header(config: pytest.Config) -> str | None:
-    sources = resolve(config)
+    sources = universe(config)
     if not sources:
         return None
 

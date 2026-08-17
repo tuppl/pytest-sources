@@ -1,9 +1,10 @@
-import os
 from collections.abc import Callable, Iterator
 from enum import StrEnum
 
 import pytest
 from xdist.scheduler import LoadFileScheduling, LoadGroupScheduling, LoadScopeScheduling
+
+from pytest_sources._core.discover import is_worker
 
 
 class Dist(StrEnum):
@@ -31,7 +32,7 @@ def settle(config: pytest.Config) -> None:
     """
     Settle what the user asked --dist for, while the answer is still legible.
     """
-    if not _is_worker(config) and (config.getoption("sources") or config.getini("sources")):
+    if not is_worker(config) and (config.getoption("sources") or config.getini("sources")):
         mode = request_dist(config)
         config.stash[REQUESTED_DIST] = mode
         _reject_conflicts(config, mode)
@@ -70,14 +71,3 @@ def request_dist(config: pytest.Config) -> Dist | None:
 def _given(config: pytest.Config) -> Iterator[str]:
     yield from config.invocation_params.args
     yield from config.getini("addopts")
-
-
-def _is_worker(config: pytest.Config) -> bool:
-    """
-    Whether this process is running tests on behalf of a controller.
-
-    Not xdist.is_xdist_worker, which takes a request or session and only looks at
-    config.workerinput. PYTEST_XDIST_WORKER is exported before a worker builds its
-    config and is inherited by anything it starts, so this holds at any depth.
-    """
-    return "PYTEST_XDIST_WORKER" in os.environ or hasattr(config, "workerinput")
