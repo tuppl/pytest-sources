@@ -79,7 +79,7 @@ class TestWhatTheBudgetTouches:
 
 
 class TestMarkerOnlyBudget:
-    """--sources-scan gives marker-only sources a failure budget, in workers too."""
+    """The marker scan gives marker-only sources a failure budget, in workers too."""
 
     def test_the_budget_reaches_a_marker_source_under_workers(self, pytester):
         for name in ("alice", "bob"):

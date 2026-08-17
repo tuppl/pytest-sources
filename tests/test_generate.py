@@ -395,7 +395,7 @@ class TestSourcesScan:
             """
         )
 
-        result = submissions.runpytest("-n", "0", "--no-sources-scan")
+        result = submissions.runpytest("-n", "0", "--no-marker-sources")
 
         result.assert_outcomes(passed=2)
         assert not any("= sources =" in line for line in result.outlines)

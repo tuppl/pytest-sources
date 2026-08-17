@@ -337,7 +337,7 @@ class TestLoadGroup:
 
 
 class TestMarkerOnlyScheduling:
-    """--sources-scan makes marker-only sources schedulable like declared ones."""
+    """The marker scan makes marker-only sources schedulable like declared ones."""
 
     def test_marker_only_sources_get_their_own_process(self, pytester, tmp_path, monkeypatch):
         monkeypatch.setenv("PIDDIR", str(tmp_path))

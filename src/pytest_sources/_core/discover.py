@@ -108,9 +108,9 @@ def universe(config: pytest.Config) -> list[Source]:
 
 
 def scan_wanted(config: pytest.Config) -> bool:
-    chosen = config.getoption("sources_scan")
+    chosen = config.getoption("marker_sources")
     if chosen is None:
-        chosen = config.getini("sources_scan")
+        chosen = config.getini("marker_sources")
     return bool(chosen)
 
 

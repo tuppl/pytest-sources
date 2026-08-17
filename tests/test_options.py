@@ -8,13 +8,13 @@ class TestSourcesOption:
 
     def test_scan_defaults_to_on(self, pytester):
         config = pytester.parseconfig()
-        assert config.getoption("sources_scan") is None
-        assert config.getini("sources_scan") is True
+        assert config.getoption("marker_sources") is None
+        assert config.getini("marker_sources") is True
 
     def test_scan_flag_and_ini_turn_it_off(self, pytester):
-        assert pytester.parseconfig("--no-sources-scan").getoption("sources_scan") is False
-        pytester.makeini("[pytest]\nsources_scan = false\n")
-        assert pytester.parseconfig().getini("sources_scan") is False
+        assert pytester.parseconfig("--no-marker-sources").getoption("marker_sources") is False
+        pytester.makeini("[pytest]\nmarker_sources = false\n")
+        assert pytester.parseconfig().getini("marker_sources") is False
 
     def test_defaults_to_no_globs(self, pytester):
         assert pytester.parseconfig().getoption("sources") == []
