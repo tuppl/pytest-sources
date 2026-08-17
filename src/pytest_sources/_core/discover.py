@@ -94,7 +94,7 @@ def universe(config: pytest.Config) -> list[Source]:
 
     declared = resolve(config)
 
-    if not scan_wanted(config) or scanning() or is_worker(config):
+    if not marker_sources_wanted(config) or scanning() or is_worker(config):
         return declared
 
     combined = {source.path: source for source in declared}
@@ -107,11 +107,8 @@ def universe(config: pytest.Config) -> list[Source]:
     return sources
 
 
-def scan_wanted(config: pytest.Config) -> bool:
-    chosen = config.getoption("marker_sources")
-    if chosen is None:
-        chosen = config.getini("marker_sources")
-    return bool(chosen)
+def marker_sources_wanted(config: pytest.Config) -> bool:
+    return not (config.getoption("skip_marker_sources") or config.getini("skip_marker_sources"))
 
 
 def scanning() -> bool:

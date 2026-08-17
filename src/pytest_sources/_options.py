@@ -29,17 +29,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addini("sources_delimiter", default=DEFAULT, help="Default --sources-delimiter")
 
     group.addoption(
-        "--no-marker-sources",
-        dest="marker_sources",
-        action="store_false",
-        default=None,
-        help=(
-            "Skip the collection pass that finds sources named only by markers. "
-            "Marker-only sources then share worker processes and get no summary "
-            "row or failure budget."
-        ),
+        "--skip-marker-sources",
+        dest="skip_marker_sources",
+        action="store_true",
+        default=False,
+        help="Skip tests whose sources marker names its own sources, and the collection pass that finds them.",
     )
-    parser.addini("marker_sources", type="bool", default=True, help="Whether to scan for marker sources")
+    parser.addini("skip_marker_sources", type="bool", default=False, help="Default --skip-marker-sources")
 
     group.addoption(
         "--sources-maxfail",

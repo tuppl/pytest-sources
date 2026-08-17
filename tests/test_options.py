@@ -6,15 +6,15 @@ from pytest_sources._core.nodeid import DEFAULT
 class TestSourcesOption:
     """Declaring --sources and the sources ini key."""
 
-    def test_scan_defaults_to_on(self, pytester):
+    def test_marker_sources_run_by_default(self, pytester):
         config = pytester.parseconfig()
-        assert config.getoption("marker_sources") is None
-        assert config.getini("marker_sources") is True
+        assert config.getoption("skip_marker_sources") is False
+        assert config.getini("skip_marker_sources") is False
 
-    def test_scan_flag_and_ini_turn_it_off(self, pytester):
-        assert pytester.parseconfig("--no-marker-sources").getoption("marker_sources") is False
-        pytester.makeini("[pytest]\nmarker_sources = false\n")
-        assert pytester.parseconfig().getini("marker_sources") is False
+    def test_the_flag_and_ini_skip_them(self, pytester):
+        assert pytester.parseconfig("--skip-marker-sources").getoption("skip_marker_sources") is True
+        pytester.makeini("[pytest]\nskip_marker_sources = true\n")
+        assert pytester.parseconfig().getini("skip_marker_sources") is True
 
     def test_defaults_to_no_globs(self, pytester):
         assert pytester.parseconfig().getoption("sources") == []

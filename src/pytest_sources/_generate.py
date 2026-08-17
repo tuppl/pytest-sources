@@ -1,6 +1,12 @@
 import pytest
 
-from pytest_sources._core.discover import parametrizes_source, record_marker_globs, scanning, sources_for
+from pytest_sources._core.discover import (
+    marker_sources_wanted,
+    parametrizes_source,
+    record_marker_globs,
+    scanning,
+    sources_for,
+)
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -12,6 +18,14 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         return
 
     if metafunc.definition.get_closest_marker("no_sources"):
+        return
+
+    marker = metafunc.definition.get_closest_marker("sources")
+    if marker is not None and marker.args and not marker_sources_wanted(metafunc.config):
+        if "source" not in metafunc.fixturenames:
+            metafunc.fixturenames.append("source")
+        skip = pytest.mark.skip(reason="marker sources are disabled by --skip-marker-sources")
+        metafunc.parametrize("source", [pytest.param(None, marks=skip, id="disabled")], indirect=True)
         return
 
     sources = sources_for(metafunc.definition, metafunc.config)

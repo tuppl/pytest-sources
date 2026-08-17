@@ -384,8 +384,8 @@ class TestSourcesScan:
 
         result.stdout.fnmatch_lines(["refs/model*1*0*0*"])
 
-    def test_the_flag_turns_the_scan_off(self, submissions):
-        """Without the scan a marker-only source loses its summary row."""
+    def test_the_flag_skips_marked_tests(self, submissions):
+        """Disabled marker sources mean the marked test does not run at all."""
         submissions.makepyfile(
             """
             import pytest
@@ -395,7 +395,18 @@ class TestSourcesScan:
             """
         )
 
-        result = submissions.runpytest("-n", "0", "--no-marker-sources")
+        result = submissions.runpytest("-n", "0", "--skip-marker-sources", "-rs")
+
+        result.assert_outcomes(skipped=1)
+        result.stdout.fnmatch_lines(["*marker sources are disabled*"])
+
+    def test_the_flag_leaves_declared_fanout_alone(self, submissions):
+        submissions.makepyfile(
+            """
+            def test_x(source): ...
+            """
+        )
+
+        result = submissions.runpytest("--sources", "submissions/*", "-n", "0", "--skip-marker-sources")
 
         result.assert_outcomes(passed=2)
-        assert not any("= sources =" in line for line in result.outlines)
