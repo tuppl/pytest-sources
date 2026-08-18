@@ -1,6 +1,7 @@
 from collections.abc import Callable, Iterator
 from enum import StrEnum
 
+import execnet
 import pytest
 from xdist.scheduler import LoadFileScheduling, LoadGroupScheduling, LoadScopeScheduling
 
@@ -45,11 +46,32 @@ def _reject_conflicts(config: pytest.Config, mode: Dist | None) -> None:
             f"combine with --sources. Use loadfile, loadscope, loadgroup or no."
         )
 
-    if mode in WITHIN and config.getoption("sources_maxfail", 0):
+    remote = _remote_tx(config) if config.getoption("sources_maxfail", 0) else []
+    if remote:
         raise pytest.UsageError(
-            f"--sources-maxfail counts failures per source, which --dist {mode} splits "
-            f"across processes. Drop one of the two."
+            f"--sources-maxfail shares a source's budget through a file on this machine, "
+            f"which --tx {', '.join(remote)} cannot reach. Drop one of the two."
         )
+
+
+def _remote_tx(config: pytest.Config) -> list[str]:
+    """
+    The --tx specs placing workers off this machine.
+
+    Only readable before xdist's pytest_cmdline_main, which fills tx with a popen
+    spec per worker.
+    """
+    return [spec for spec in getattr(config.option, "tx", []) or [] if not _is_local(spec)]
+
+
+def _is_local(spec: str) -> bool:
+    count, star, rest = spec.partition("*")
+    try:
+        parsed = execnet.XSpec(rest if star and count.isdigit() else spec)
+    except (AttributeError, ValueError):
+        # Unparseable, and xdist says so itself once it gets this far.
+        return True
+    return bool(parsed.popen) and not parsed.via
 
 
 def request_dist(config: pytest.Config) -> Dist | None:

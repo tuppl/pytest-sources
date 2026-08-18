@@ -72,12 +72,25 @@ class TestDistMode:
         assert result.ret == pytest.ExitCode.USAGE_ERROR
 
     @pytest.mark.parametrize("mode", ["loadfile", "loadscope", "loadgroup"])
-    def test_a_grouping_mode_is_refused_alongside_sources_maxfail(self, submissions, mode):
-        """A grouping mode splits a source, and the budget is counted per process."""
+    def test_a_grouping_mode_is_accepted_alongside_sources_maxfail(self, submissions, mode):
+        """A grouping mode splits a source, and the processes share the budget by file."""
         result = submissions.runpytest("--sources", "submissions/*", "--dist", mode, "--sources-maxfail=1")
 
+        result.assert_outcomes(passed=6)
+
+    @pytest.mark.parametrize("spec", ["ssh=grader@host", "socket=192.168.1.1:8888"])
+    def test_a_remote_worker_is_refused_alongside_sources_maxfail(self, submissions, spec):
+        """The budget is shared through a file, which another machine cannot open."""
+        result = submissions.runpytest("--sources", "submissions/*", "--tx", spec, "--sources-maxfail=1")
+
         assert result.ret == pytest.ExitCode.USAGE_ERROR
-        result.stderr.fnmatch_lines(["*--sources-maxfail counts failures per source*"])
+        result.stderr.fnmatch_lines(["*--sources-maxfail shares a source's budget through a file*"])
+
+    def test_local_workers_are_not_mistaken_for_remote_ones(self, submissions):
+        """-n leaves tx empty until xdist fills it, and an explicit popen spec is local."""
+        result = submissions.runpytest("--sources", "submissions/*", "--tx", "2*popen", "--sources-maxfail=1")
+
+        result.assert_outcomes(passed=6)
 
     def test_sources_maxfail_is_unaffected_without_a_grouping_mode(self, submissions):
         result = submissions.runpytest("--sources", "submissions/*", "--sources-maxfail=1")

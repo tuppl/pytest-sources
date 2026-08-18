@@ -5,6 +5,7 @@ from xdist.remote import Producer
 from xdist.workermanage import WorkerController
 
 from pytest_sources._core.discover import universe
+from pytest_sources._core.maxfail import LOG, shared_log
 from pytest_sources._core.schedule import SourceScheduling, start_replacement
 
 
@@ -33,9 +34,11 @@ def pytest_testnodedown(node: WorkerController, error: object | None) -> None:
 
 @pytest.hookimpl
 def pytest_configure_node(node: WorkerController) -> None:
-    """
-    Ship the source universe to the worker, which cannot scan for it itself.
-    """
-    sources = universe(node.config)
-    if sources:
-        node.workerinput["sources_universe"] = [[str(source.path), source.id] for source in sources]
+    config = node.config
+    sources = universe(config)
+    if not sources:
+        return
+
+    node.workerinput["sources_universe"] = [[str(source.path), source.id] for source in sources]
+    if config.getoption("sources_maxfail") > 0:
+        node.workerinput[LOG] = str(shared_log(config))

@@ -4,7 +4,7 @@ import pytest
 
 from pytest_sources._core import nodeid
 from pytest_sources._core.discover import UNIVERSE, resolve, scanning, universe
-from pytest_sources._core.maxfail import SourceMaxfail
+from pytest_sources._core.maxfail import SourceMaxfail, discard_log
 from pytest_sources._core.source import Source
 from pytest_sources._core.summary import SourceSummary, Summary
 
@@ -55,3 +55,4 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     if scanning():
         return
     nodeid.reset()
+    discard_log(config)

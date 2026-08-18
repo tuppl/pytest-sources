@@ -22,6 +22,7 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
+  "execnet>=2.1",
   "pytest>=8.0,<10",
   "pytest-xdist>=3.8.0,<4",
 ]

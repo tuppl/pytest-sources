@@ -86,8 +86,8 @@ class SourceScheduling(LoadScopeScheduling):
         for nodeid in collection:
             sources.setdefault(source_of(nodeid, self._source_ids), []).append(nodeid)
 
-        # Each chunk is counted separately by --sources-maxfail, so splitting
-        # would turn a budget per source into a budget per chunk.
+        # Processes share a budget approximately, so a source under
+        # --sources-maxfail stays whole and spends its own exactly.
         splittable = not self.config.getoption("sources_maxfail")
 
         counts = {source_id: len(nodeids) for source_id, nodeids in sources.items()}

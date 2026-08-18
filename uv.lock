@@ -309,6 +309,7 @@ name = "pytest-sources"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "execnet" },
     { name = "pytest" },
     { name = "pytest-xdist" },
 ]
@@ -321,6 +322,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "execnet", specifier = ">=2.1" },
     { name = "pytest", specifier = ">=8.0,<10" },
     { name = "pytest-xdist", specifier = ">=3.8.0,<4" },
 ]
