@@ -1,4 +1,3 @@
-import math
 import warnings
 from collections.abc import Sequence
 
@@ -91,12 +90,14 @@ class SourceScheduling(LoadScopeScheduling):
         # would turn a budget per source into a budget per chunk.
         splittable = not self.config.getoption("sources_maxfail")
 
+        counts = {source_id: len(nodeids) for source_id, nodeids in sources.items()}
+        allocation = _allocate(counts, self.numnodes) if splittable else dict.fromkeys(counts, 1)
+
         scopes: dict[str, str] = {}
         for source_id, nodeids in sources.items():
-            chunks = min(max(1, self.numnodes // len(sources)), len(nodeids)) if splittable else 1
-            size = math.ceil(len(nodeids) / chunks)
-            for position, nodeid in enumerate(nodeids):
-                scopes[nodeid] = f"{source_id}{delimiter()}{position // size}"
+            for index, chunk in enumerate(_partition(nodeids, allocation[source_id])):
+                for nodeid in chunk:
+                    scopes[nodeid] = f"{source_id}{delimiter()}{index}"
         return scopes
 
 
@@ -128,3 +129,35 @@ def start_replacement(node: WorkerController, error: object | None) -> None:
         )
         return
     clone(node)
+
+
+def _allocate(counts: dict[str, int], workers: int) -> dict[str, int]:
+    """
+    Decide how many chunks each source is cut into, given its test count.
+
+    Every source takes one chunk, then each worker still spare goes to whichever
+    source has the largest chunk. That keeps the longest work item as short as
+    the workers allow, and it is the longest work item the run waits on. A source
+    is never cut past a chunk per test.
+    """
+    chunks = dict.fromkeys(counts, 1)
+    for _ in range(workers - len(counts)):
+        splittable = [source_id for source_id in counts if chunks[source_id] < counts[source_id]]
+        if not splittable:
+            break
+        chunks[max(splittable, key=lambda source_id: counts[source_id] / chunks[source_id])] += 1
+    return chunks
+
+
+def _partition(nodeids: list[str], chunks: int) -> list[list[str]]:
+    """
+    Cut the tests into N contiguous chunks, no two differing by more than one test.
+    """
+    size, remainder = divmod(len(nodeids), chunks)
+    partitions = []
+    start = 0
+    for index in range(chunks):
+        stop = start + size + (index < remainder)
+        partitions.append(nodeids[start:stop])
+        start = stop
+    return partitions

@@ -53,6 +53,12 @@ class TestDistributedHeader:
 
         result.stdout.fnmatch_lines(["sources: 2, workers: 4, work items: up to 4"])
 
+    def test_workers_that_do_not_divide_the_sources_are_all_counted(self, submissions):
+        """Every spare worker splits a source further, so the bound is the worker count."""
+        result = submissions.runpytest("--sources", "submissions/*", "-n", "3")
+
+        result.stdout.fnmatch_lines(["sources: 2, workers: 3, work items: up to 3"])
+
     def test_n_auto_reports_the_resolved_count(self, submissions):
         """xdist turns auto into a number before the header is printed."""
         result = submissions.runpytest("--sources", "submissions/*", "-n", "auto")

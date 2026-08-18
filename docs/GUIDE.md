@@ -103,7 +103,7 @@ When parallel testing is enabled, the testing of a source is grouped as a single
 
 When:
 - `num_worker <= num_source`: each testing of a source is a work item, with surplus work items queued.
-- `num_worker > num_source`: each source is split into `num_worker / num_source` work items.
+- `num_worker > num_source`: every source starts as one work item and each spare worker splits whichever source has the largest work item, until no worker is spare or every work item is a single test.
 
 > pytest-xdist assumes number of workers and number of processes to be one-to-one. But pytest-sources has decoupled this by allowing workers to shutdown and spin-up new processes with a worker.
 
@@ -252,7 +252,11 @@ sources/alice         .         .           .
 sources/bob           F         s           s
 ```
 
-This option is incompatible with `loadfile`, `loadscope` or `loadgroup`.
+The default distribution keeps a source in one process, so the budget is spent exactly: `N` failures, then skips.
+
+Under `loadfile`, `loadscope` or `loadgroup` a source is split over several processes, which share the budget through a file. Sharing is not instantaneous, so the guarantee loosens to at most `N` failures plus any tests already running when the limit is reached. Two processes can both fail a test of the same source before either sees the other's, and a test already underway cannot be recalled.
+
+The file sits on the machine running pytest. xdist's `--tx` option can put workers on another host over ssh or a socket, and those workers cannot reach it, so each host would quietly spend a budget of its own. pytest-sources refuses that combination rather than report a wrong count.
 
 ## Limitations
 

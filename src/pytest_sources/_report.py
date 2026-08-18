@@ -24,10 +24,6 @@ def _work_items(config: pytest.Config, sources: int, workers: int) -> str:
     if mode is not None and mode in WITHIN:
         return f"decided by --dist {mode}"
 
-    # Splitting a source would split its failure budget, so maxfail keeps one
-    # work item per source. Same for runs with no spare workers.
-    chunks = max(1, workers // sources) if not config.getoption("sources_maxfail") else 1
-    if chunks == 1:
+    if config.getoption("sources_maxfail") or workers <= sources:
         return str(sources)
-    # Chunking caps at each source's test count, which is unknown until collection.
-    return f"up to {sources * chunks}"
+    return f"up to {workers}"

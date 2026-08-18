@@ -2,6 +2,8 @@ from collections import Counter
 
 import pytest
 
+from pytest_sources._core.schedule import _allocate, _partition
+
 
 def worker_assignments(result):
     """Map each worker id to the set of sources it ran tests for."""
@@ -37,6 +39,45 @@ def read_pids(directory):
     return {path.name: path.read_text() for path in directory.iterdir()}
 
 
+class TestAllocation:
+    """Handing the workers a run has spare to the sources that need them most."""
+
+    def test_a_worker_per_source_leaves_every_source_whole(self):
+        assert _allocate({"alice": 4, "bob": 4, "carol": 4}, 3) == {"alice": 1, "bob": 1, "carol": 1}
+
+    def test_fewer_workers_than_sources_leaves_every_source_whole(self):
+        assert _allocate({"alice": 4, "bob": 4, "carol": 4}, 2) == {"alice": 1, "bob": 1, "carol": 1}
+
+    def test_spare_workers_are_spread_over_equal_sources(self):
+        """Five workers over three sources: five work items, nobody idle."""
+        assert _allocate({"alice": 4, "bob": 4, "carol": 4}, 5) == {"alice": 2, "bob": 2, "carol": 1}
+
+    def test_the_source_with_the_most_tests_takes_the_spare_workers(self):
+        """Splitting the 20 twice beats splitting a 10 once: the wait drops from 20 to 10."""
+        assert _allocate({"alice": 20, "bob": 10, "carol": 10}, 5) == {"alice": 3, "bob": 1, "carol": 1}
+
+    def test_a_source_is_never_cut_past_a_chunk_per_test(self):
+        """One test cannot be split, so its worker goes to the source that can use it."""
+        assert _allocate({"alice": 1, "bob": 10}, 6) == {"alice": 1, "bob": 5}
+
+    def test_workers_left_over_once_every_source_is_cut_up_are_dropped(self):
+        assert _allocate({"alice": 2, "bob": 1}, 10) == {"alice": 2, "bob": 1}
+
+
+class TestPartitioning:
+    """Cutting a source's tests into the chunks it was allocated."""
+
+    def test_chunks_differ_by_at_most_one_test(self):
+        """Ten tests into four is 3, 3, 2, 2 rather than 3, 3, 3, 1."""
+        assert _partition(list("abcdefghij"), 4) == [["a", "b", "c"], ["d", "e", "f"], ["g", "h"], ["i", "j"]]
+
+    def test_a_chunk_per_test_divides_evenly(self):
+        assert _partition(list("abc"), 3) == [["a"], ["b"], ["c"]]
+
+    def test_more_chunks_than_tests_leaves_the_remainder_empty(self):
+        assert _partition(list("ab"), 4) == [["a"], ["b"], [], []]
+
+
 class TestWorkerAssignment:
     """Which worker each source's tests are given to."""
 
@@ -64,6 +105,23 @@ class TestWorkerAssignment:
             "submissions/bob": 2,
             "submissions/carol": 2,
         }
+
+    def test_workers_that_do_not_divide_the_sources_are_still_all_used(self, submissions):
+        """Five workers over three sources: two sources take two workers, one takes one.
+
+        Five does not divide by three, so giving every source the same number of
+        chunks would leave two of the workers with nothing to run.
+        """
+        result = submissions.runpytest("--sources", "submissions/*", "-n", "5", "-v")
+        result.assert_outcomes(passed=6)
+
+        assignments = worker_assignments(result)
+        assert len(assignments) == 5
+        assert all(len(sources) == 1 for sources in assignments.values())
+
+        per_source = Counter(next(iter(sources)) for sources in assignments.values())
+        assert sorted(per_source) == ["submissions/alice", "submissions/bob", "submissions/carol"]
+        assert sorted(per_source.values()) == [1, 2, 2]
 
     def test_a_worker_is_replaced_rather_than_reused(self, submissions):
         """Two slots, three sources, so a slot has to take a second source.

@@ -52,7 +52,7 @@ tests/test_add.py::test_add[sources/bob]   FAILED
 | `-n N` / `-n auto` | | `0` | Workers ([pytest-xdist](https://pytest-xdist.readthedocs.io/en/stable/distribution.html)). `auto` starts one worker per source, capped at the CPU count. Without workers, sources share one process and lose isolation. |
 | `--dist MODE` | | `load` | Split a source into more work items: `loadfile`, `loadscope`, `loadgroup`. |
 | `--sources-summary VIEW` | | `counts` | View test results as a table with options: `counts`, `sources`, `tests`, `none`. |
-| `--sources-maxfail N` | | `0` (off) | Per-source failure budget. Incompatible with `--dist` grouping modes. |
+| `--sources-maxfail N` | | `0` (off) | Per-source failure budget. Exact by default, approximate when a `--dist` grouping mode splits the source over processes. |
 | `--sources-delimiter CHAR` | `sources_delimiter` | `+` | Separator between parameters in a test id. No source path may contain it. |
 | `--skip-marker-sources` | `skip_marker_sources` | `false` | Skip tests with the `sources` marker. |
 
@@ -66,7 +66,7 @@ tests/test_add.py::test_add[sources/bob]   FAILED
 
 ### The `source` fixture
 
-| | |
+| property | description |
 |---|---|
 | `source.id` | The source path relative to the rootdir, as it appears in the test id. |
 | `source.name` | The directory name on its own. |
@@ -78,5 +78,4 @@ tests/test_add.py::test_add[sources/bob]   FAILED
 ## Todo
 
 - Support for `--dist each` and `--dist worksteal`.
-- More efficient worker scheduling. 6 workers with 3 sources and 2 work items each has all 6 workers busy. However, 5 workers with 3 sources and 1 work item each has 2 workers idling.
 - More efficient test collection. All tests are collected again per source spin-up.
