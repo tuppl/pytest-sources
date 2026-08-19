@@ -1,6 +1,6 @@
 [project]
 name = "pytest-sources"
-version = "0.1.0"
+version = "0.2.0"
 description = "pytest plugin for running tests on multiple sources"
 readme = "README.md"
 requires-python = ">=3.12"
