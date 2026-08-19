@@ -42,6 +42,8 @@ tests/test_add.py::test_add[sources/alice] PASSED
 tests/test_add.py::test_add[sources/bob]   FAILED
 ```
 
+> See [`source`'s full API](docs/GUIDE.md#source-fixture) for `import_module`, `chdir`, and the rest.
+
 ## Reference
 
 ### Options
@@ -63,17 +65,6 @@ tests/test_add.py::test_add[sources/bob]   FAILED
 | `@pytest.mark.sources(*globs)` | Run this test against its own sources instead of the `--sources` set. |
 | `@pytest.mark.no_sources` | Run this test once, exempt from being tested against each source. |
 | `@pytest.mark.no_chdir` | Keep the working directory pytest was started in. |
-
-### The `source` fixture
-
-| property | description |
-|---|---|
-| `source.id` | The source path relative to the rootdir, as it appears in the test id. |
-| `source.name` | The directory name on its own. |
-| `source.path` | The directory as a `Path`. |
-| `source / "data.txt"` | `source` is path-like representing the source path. |
-| `source.import_module("solution")` | Import that reports a missing file as one line rather than a traceback. |
-| `source.chdir()` | Move into the source by hand. |
 
 ## Todo
 
