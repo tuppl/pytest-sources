@@ -24,6 +24,39 @@ def mixed(pytester):
     return pytester
 
 
+@pytest.fixture
+def parametrised_ahead(pytester):
+    """Two sources under a plugin whose generate hook beats ours to the id.
+
+    A conftest is registered after the entry point plugins, so its tryfirst
+    pytest_generate_tests runs first and its parameter leads the bracket.
+    """
+    for name in ("alice", "bob"):
+        (pytester.path / "submissions" / name).mkdir(parents=True)
+    pytester.makeconftest(
+        """
+        import pytest
+
+        @pytest.fixture(scope="session")
+        def axis(request):
+            return request.param
+
+        @pytest.hookimpl(tryfirst=True)
+        def pytest_generate_tests(metafunc):
+            if "axis" in metafunc.fixturenames:
+                metafunc.parametrize("axis", ["w1"], indirect=True, scope="session")
+        """
+    )
+    pytester.makepyfile(
+        """
+        def test_leading(axis, source): ...
+
+        def test_plain(source): ...
+        """
+    )
+    return pytester
+
+
 def section(result):
     """The lines between the sources separator and whatever follows it."""
     lines = result.outlines
@@ -281,3 +314,22 @@ class TestSummaryOption:
 
         assert result.ret != 0
         result.stderr.fnmatch_lines(["*invalid choice*"])
+
+
+class TestParametersAheadOfTheSource:
+    """Another plugin's parameters may lead the id, and the source still counts."""
+
+    def test_every_test_is_attributed_to_its_source(self, parametrised_ahead):
+        result = parametrised_ahead.runpytest("--sources", "submissions/*", "-n", "0")
+
+        assert rows(result) == {
+            "submissions/alice": ["2", "0", "0", "0"],
+            "submissions/bob": ["2", "0", "0", "0"],
+        }
+
+    def test_the_table_totals_agree_with_the_run(self, parametrised_ahead):
+        """The counts used to add up to less than the run reported."""
+        result = parametrised_ahead.runpytest("--sources", "submissions/*", "-n", "0")
+
+        result.assert_outcomes(passed=4)
+        assert sum(int(count) for counts in rows(result).values() for count in counts) == 4

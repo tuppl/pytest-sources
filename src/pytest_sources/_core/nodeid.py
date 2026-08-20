@@ -18,15 +18,13 @@ def delimiter() -> str:
 def source_of(nodeid: str, source_ids: Container[str]) -> str:
     """
     Recover the source (directory) a test belongs to from its nodeid.
-
-    The source is always the first part of the nodeid up until the delimiter.
     """
     nodeid = drop_group(nodeid)
     start = nodeid.find("[", nodeid.rfind("::") + 1)
     if start == -1:
         return UNFANNED
-    candidate = nodeid[start + 1 :].removesuffix("]").split(delimiter())[0]
-    return candidate if candidate in source_ids else UNFANNED
+    tokens = nodeid[start + 1 :].removesuffix("]").split(delimiter())
+    return next((token for token in tokens if token in source_ids), UNFANNED)
 
 
 def drop_group(nodeid: str) -> str:

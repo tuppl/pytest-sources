@@ -163,11 +163,27 @@ class TestSourceOf:
         assert source_of("t.py::test_x[submissions/alice-alt+1]", SOURCE_IDS) == "submissions/alice-alt"
         assert source_of("t.py::test_x[submissions/alice+alt]", SOURCE_IDS) == "submissions/alice"
 
+    def test_matches_a_source_another_plugin_parametrised_ahead_of(self):
+        """A plugin whose generate hook runs before ours takes the front of the id."""
+        assert source_of("t.py::test_x[w1+submissions/alice]", SOURCE_IDS) == "submissions/alice"
+
+    def test_matches_a_source_with_parameters_either_side_of_it(self):
+        assert source_of("t.py::test_x[w1+submissions/alice+1-2]", SOURCE_IDS) == "submissions/alice"
+
+    def test_matches_a_source_in_the_last_position(self):
+        assert source_of("t.py::test_x[w1+3+submissions/alice]", SOURCE_IDS) == "submissions/alice"
+
+    def test_ignores_the_group_when_the_source_is_not_first(self):
+        assert source_of("t.py::test_x[w1+submissions/alice]@db", SOURCE_IDS) == "submissions/alice"
+
     def test_unparametrised_test_belongs_to_no_source(self):
         assert source_of("t.py::test_x", SOURCE_IDS) == UNFANNED
 
     def test_unknown_parameter_belongs_to_no_source(self):
         assert source_of("t.py::test_x[3]", SOURCE_IDS) == UNFANNED
+
+    def test_a_test_whose_parameters_name_no_source_belongs_to_none(self):
+        assert source_of("t.py::test_x[w1+3+a-b]", SOURCE_IDS) == UNFANNED
 
     def test_matches_a_bare_nodeid_without_a_module_separator(self):
         assert source_of("test_x[submissions/alice]", SOURCE_IDS) == "submissions/alice"

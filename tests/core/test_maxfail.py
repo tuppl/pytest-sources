@@ -221,3 +221,40 @@ class TestMarkerOnlyBudget:
         result = pytester.runpytest("--sources-maxfail=1", "-n", "2")
 
         result.assert_outcomes(passed=3, failed=1, skipped=2)
+
+
+class TestParametersAheadOfTheSource:
+    """The budget holds when another plugin's parameter leads the id."""
+
+    @pytest.fixture
+    def leading(self, pytester):
+        for name in ("alice", "bob"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makeconftest(
+            """
+            import pytest
+
+            @pytest.fixture(scope="session")
+            def axis(request):
+                return request.param
+
+            @pytest.hookimpl(tryfirst=True)
+            def pytest_generate_tests(metafunc):
+                if "axis" in metafunc.fixturenames:
+                    metafunc.parametrize("axis", ["w1"], indirect=True, scope="session")
+            """
+        )
+        pytester.makepyfile(
+            """
+            def test_one(axis, source): assert False
+            def test_two(axis, source): assert False
+            def test_three(axis, source): assert False
+            """
+        )
+        return pytester
+
+    def test_each_source_still_stops_at_the_limit(self, leading):
+        """Unattributed tests used to spend no budget at all, so every one of them ran."""
+        result = leading.runpytest("--sources", "submissions/*", "-n", "0", "--sources-maxfail=1")
+
+        result.assert_outcomes(failed=2, skipped=4)

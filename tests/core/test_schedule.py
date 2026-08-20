@@ -423,3 +423,47 @@ class TestMarkerOnlyScheduling:
         assert pids["alice-a"] == pids["alice-b"]
         assert pids["bob-a"] == pids["bob-b"]
         assert pids["alice-a"] != pids["bob-a"]
+
+
+class TestParametersAheadOfTheSource:
+    """Isolation when another plugin's parameter leads the id.
+
+    A test read as belonging to no source is scheduled under the empty scope, so
+    two sources would share the one process that scope is given.
+    """
+
+    def test_each_source_keeps_its_own_process(self, pytester, tmp_path, monkeypatch):
+        monkeypatch.setenv("PIDDIR", str(tmp_path))
+        for name in ("alice", "bob"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        pytester.makeconftest(
+            """
+            import pytest
+
+            @pytest.fixture(scope="session")
+            def axis(request):
+                return request.param
+
+            @pytest.hookimpl(tryfirst=True)
+            def pytest_generate_tests(metafunc):
+                if "axis" in metafunc.fixturenames:
+                    metafunc.parametrize("axis", ["w1"], indirect=True, scope="session")
+            """
+        )
+        pytester.makepyfile(
+            """
+            import os, pathlib
+
+            def test_leading(axis, source):
+                pathlib.Path(os.environ["PIDDIR"], source.name).write_text(str(os.getpid()))
+            """
+        )
+
+        # One worker, so the run is a chain of recycled processes and chunking has
+        # no spare worker to split the empty scope with. A single work item then
+        # means a single process for both sources.
+        result = pytester.runpytest("--sources", "submissions/*", "-n", "1")
+
+        result.assert_outcomes(passed=2)
+        pids = {path.read_text() for path in tmp_path.iterdir()}
+        assert len(pids) == 2, "both sources ran in the same process"
