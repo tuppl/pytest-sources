@@ -129,3 +129,46 @@ class TestOptInDistribution:
 
         result.assert_outcomes(passed=2)
         assert len({path.read_text() for path in tmp_path.iterdir()}) == 1
+
+
+class TestSourcesTakesOneGlob:
+    """--sources takes a single glob, so a second bare value is a test path.
+
+    Left to pytest it collects from the source directory instead of the suite,
+    runs nothing and reports a clean summary for the first source alone.
+    """
+
+    def test_a_source_directory_as_a_test_path_is_refused(self, submissions):
+        result = submissions.runpytest("--sources", "submissions/alice", "submissions/bob")
+
+        assert result.ret == pytest.ExitCode.USAGE_ERROR
+        result.stderr.fnmatch_lines(["*submissions/bob*--sources*"])
+
+    def test_a_directory_from_the_resolved_set_is_refused(self, submissions):
+        result = submissions.runpytest("--sources", "submissions/*", "submissions/bob")
+
+        assert result.ret == pytest.ExitCode.USAGE_ERROR
+        result.stderr.fnmatch_lines(["*submissions/bob*--sources*"])
+
+    def test_a_test_directory_near_the_sources_keeps_working(self, pytester):
+        for name in ("alice", "bob"):
+            (pytester.path / "submissions" / name).mkdir(parents=True)
+        tests = pytester.path / "tests"
+        tests.mkdir()
+        (tests / "test_x.py").write_text("def test_x(source): ...\n")
+
+        result = pytester.runpytest("tests", "--sources", "submissions/*")
+
+        result.assert_outcomes(passed=2)
+
+    def test_the_spelling_of_the_path_does_not_matter(self, submissions):
+        for spelling in ("./submissions/bob", str(submissions.path / "submissions" / "bob")):
+            result = submissions.runpytest("--sources", "submissions/alice", spelling)
+
+            assert result.ret == pytest.ExitCode.USAGE_ERROR
+
+    def test_the_error_appears_once_with_workers_requested(self, submissions):
+        result = submissions.runpytest("--sources", "submissions/alice", "submissions/bob", "-n", "2")
+
+        assert result.ret == pytest.ExitCode.USAGE_ERROR
+        assert sum("submissions/bob" in line for line in result.errlines) == 1

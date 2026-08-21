@@ -1,11 +1,12 @@
 from collections.abc import Callable, Iterator
 from enum import StrEnum
+from pathlib import Path
 
 import execnet
 import pytest
 from xdist.scheduler import LoadFileScheduling, LoadGroupScheduling, LoadScopeScheduling
 
-from pytest_sources._core.discover import is_worker
+from pytest_sources._core.discover import is_worker, resolve
 
 
 class Dist(StrEnum):
@@ -37,6 +38,7 @@ def settle(config: pytest.Config) -> None:
         mode = request_dist(config)
         config.stash[REQUESTED_DIST] = mode
         _reject_conflicts(config, mode)
+        _reject_stray_paths(config)
 
 
 def _reject_conflicts(config: pytest.Config, mode: Dist | None) -> None:
@@ -52,6 +54,29 @@ def _reject_conflicts(config: pytest.Config, mode: Dist | None) -> None:
             f"--sources-maxfail shares a source's budget through a file on this machine, "
             f"which --tx {', '.join(remote)} cannot reach. Drop one of the two."
         )
+
+
+def _reject_stray_paths(config: pytest.Config) -> None:
+    """
+    Refuse a user-typed test path that names a source directory.
+
+    --sources takes one glob per flag, so a second bare value becomes a
+    positional test path and pytest collects from the source instead of the
+    suite.
+    """
+    if config.args_source is not pytest.Config.ArgsSource.ARGS:
+        return
+
+    sources = {source.path for source in resolve(config)}
+    parents = {path.parent for path in sources if path.parent != config.rootpath}
+    for argument in config.args:
+        path = Path(config.invocation_params.dir, argument).resolve()
+        if path.is_dir() and (path in sources or path.parent in parents):
+            raise pytest.UsageError(
+                f"{argument!r} is a source directory but reached pytest as a test path: "
+                f"--sources takes one glob per flag. Repeat the flag for each glob or "
+                f"quote one glob that matches them all."
+            )
 
 
 def _remote_tx(config: pytest.Config) -> list[str]:
