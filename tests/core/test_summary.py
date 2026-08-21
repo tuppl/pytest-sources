@@ -333,3 +333,100 @@ class TestParametersAheadOfTheSource:
 
         result.assert_outcomes(passed=4)
         assert sum(int(count) for counts in rows(result).values() for count in counts) == 4
+
+
+class TestForeignItems:
+    """Items another collector creates, one artifact per source.
+
+    The plugin never parametrised them, so no token in their nodeid names a
+    source and their results are dropped from the table. The conftest declares
+    the owner on user_properties, which is the association a fix would read.
+    """
+
+    @pytest.fixture
+    def checks(self, pytester):
+        for name in ("good", "slow"):
+            (pytester.path / "sources" / name).mkdir(parents=True)
+            (pytester.path / "checks" / name).mkdir(parents=True)
+            (pytester.path / "checks" / name / "a.check").write_text("x\n")
+        pytester.makeconftest(
+            """
+            import pytest
+
+            def pytest_collect_file(parent, file_path):
+                if file_path.suffix == ".check":
+                    return CheckFile.from_parent(parent, path=file_path)
+
+            class CheckFile(pytest.File):
+                def collect(self):
+                    yield CheckItem.from_parent(self, name="verify")
+
+            class CheckItem(pytest.Item):
+                def runtest(self):
+                    if self.path.parent.name == "slow":
+                        raise AssertionError("check failed")
+
+                def repr_failure(self, excinfo):
+                    return str(excinfo.value)
+
+            def pytest_collection_modifyitems(config, items):
+                for item in items:
+                    if isinstance(item, CheckItem):
+                        item.user_properties.append(("source", f"sources/{item.path.parent.name}"))
+            """
+        )
+        pytester.makepyfile("def test_ok(source): ...")
+        return pytester
+
+    @pytest.mark.xfail(strict=True, reason="results of items the plugin did not create are dropped")
+    def test_a_failing_check_counts_against_its_source(self, checks):
+        result = checks.runpytest("--sources", "sources/*", "-n", "0")
+
+        result.assert_outcomes(passed=3, failed=1)
+        assert rows(result) == {
+            "sources/good": ["2", "0", "0", "0"],
+            "sources/slow": ["1", "1", "0", "0"],
+        }
+
+
+class TestCombinedParametrize:
+    """A harness parametrising source and case together, in one call.
+
+    pytest joins the values of a single parametrize call with "-", not the
+    sources delimiter, so the source cannot be read back out of the id.
+    """
+
+    @pytest.fixture
+    def combined(self, pytester):
+        for name in ("good", "slow"):
+            (pytester.path / "sources" / name).mkdir(parents=True)
+        pytester.makeconftest(
+            """
+            def pytest_generate_tests(metafunc):
+                if "case" in metafunc.fixturenames:
+                    pairs = [(s, c) for s in ("sources/good", "sources/slow") for c in ("alpha", "beta")]
+                    metafunc.parametrize("source,case", pairs)
+            """
+        )
+        pytester.makepyfile(
+            """
+            import pytest
+
+            @pytest.mark.no_sources
+            def test_combined(source, case):
+                assert not (source == "sources/slow" and case == "beta")
+            """
+        )
+        return pytester
+
+    @pytest.mark.parametrize("workers", ["0", "2"])
+    def test_the_failure_counts_against_its_source(self, combined, workers):
+        """Under workers the controller never collects, so the attribution has to
+        reach it on the report rather than from a map of its own."""
+        result = combined.runpytest("--sources", "sources/*", "-n", workers)
+
+        result.assert_outcomes(passed=3, failed=1)
+        assert rows(result) == {
+            "sources/good": ["2", "0", "0", "0"],
+            "sources/slow": ["1", "1", "0", "0"],
+        }

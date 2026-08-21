@@ -3,6 +3,7 @@ from enum import StrEnum
 
 import pytest
 
+from pytest_sources._core.attribution import attributed, carried, source_map
 from pytest_sources._core.discover import universe
 from pytest_sources._core.nodeid import delimiter, drop_group, source_of
 
@@ -44,13 +45,14 @@ class SourceSummary:
     def __init__(self, config: pytest.Config) -> None:
         self._sources = [source.id for source in universe(config)]
         self._source_ids = set(self._sources)
+        self._map = source_map(config)
         self._style = Summary(config.getoption("sources_summary"))
         self._results: dict[str, dict[str, Outcome]] = {source: {} for source in self._sources}
         self._duration: dict[str, float] = dict.fromkeys(self._sources, 0.0)
 
     @pytest.hookimpl
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
-        source = source_of(report.nodeid, self._source_ids)
+        source = self._source_of(report)
         if not source:
             return
 
@@ -58,6 +60,20 @@ class SourceSummary:
         outcome = _outcome(report)
         if outcome is not None:
             self._results[source][_test_of(report.nodeid, source)] = outcome
+
+    def _source_of(self, report: pytest.TestReport) -> str:
+        """
+        What the report is attributed to, most trustworthy first.
+
+        A worker collected the test and put its source on the report; this
+        process may not have collected at all, and falls back to its own map
+        and then to reading the nodeid.
+        """
+        return (
+            carried(report, self._source_ids)
+            or attributed(report.nodeid, self._map, self._source_ids)
+            or source_of(report.nodeid, self._source_ids)
+        )
 
     @pytest.hookimpl
     def pytest_terminal_summary(self, terminalreporter) -> None:
@@ -135,7 +151,9 @@ def _test_of(nodeid: str, source: str) -> str:
     head, bracket, params = drop_group(nodeid).partition("[")
     if not bracket:
         return head
-    rest = params.removesuffix("]").removeprefix(source).removeprefix(delimiter())
+    rest = params.removesuffix("]")
+    if rest.startswith(source):
+        rest = rest.removeprefix(source).removeprefix(delimiter()).removeprefix("-")
     return f"{head}[{rest}]" if rest else head
 
 

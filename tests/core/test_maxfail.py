@@ -258,3 +258,86 @@ class TestParametersAheadOfTheSource:
         result = leading.runpytest("--sources", "submissions/*", "-n", "0", "--sources-maxfail=1")
 
         result.assert_outcomes(failed=2, skipped=4)
+
+
+class TestForeignItems:
+    """A failing item the plugin did not create spends no budget."""
+
+    @pytest.fixture
+    def checks(self, pytester):
+        """A per-source artifact collected off disk, sorting before the tests."""
+        for name in ("good", "slow"):
+            (pytester.path / "sources" / name).mkdir(parents=True)
+            (pytester.path / "checks" / name).mkdir(parents=True)
+            (pytester.path / "checks" / name / "a.check").write_text("x\n")
+        pytester.makeconftest(
+            """
+            import pytest
+
+            def pytest_collect_file(parent, file_path):
+                if file_path.suffix == ".check":
+                    return CheckFile.from_parent(parent, path=file_path)
+
+            class CheckFile(pytest.File):
+                def collect(self):
+                    yield CheckItem.from_parent(self, name="verify")
+
+            class CheckItem(pytest.Item):
+                def runtest(self):
+                    if self.path.parent.name == "slow":
+                        raise AssertionError("check failed")
+
+                def repr_failure(self, excinfo):
+                    return str(excinfo.value)
+
+            def pytest_collection_modifyitems(config, items):
+                for item in items:
+                    if isinstance(item, CheckItem):
+                        item.user_properties.append(("source", f"sources/{item.path.parent.name}"))
+            """
+        )
+        pytester.makepyfile("def test_ok(source): ...")
+        return pytester
+
+    @pytest.mark.xfail(strict=True, reason="results of items the plugin did not create spend no budget")
+    def test_a_foreign_failure_spends_the_budget(self, checks):
+        result = checks.runpytest("--sources", "sources/*", "-n", "0", "--sources-maxfail=1")
+
+        result.assert_outcomes(passed=2, failed=1, skipped=1)
+
+
+class TestCombinedParametrize:
+    """A failure whose id came from one combined parametrize call spends the budget."""
+
+    @pytest.fixture
+    def combined(self, pytester):
+        for name in ("good", "slow"):
+            (pytester.path / "sources" / name).mkdir(parents=True)
+        pytester.makeconftest(
+            """
+            def pytest_generate_tests(metafunc):
+                if "case" in metafunc.fixturenames:
+                    pairs = [(s, c) for s in ("sources/good", "sources/slow") for c in ("alpha", "beta")]
+                    metafunc.parametrize("source,case", pairs)
+            """
+        )
+        pytester.makepyfile(
+            test_cases="""
+            import pytest
+
+            @pytest.mark.no_sources
+            def test_combined(source, case):
+                assert not (source == "sources/slow" and case == "beta")
+            """,
+            test_zz_after="""
+            def test_after(source): ...
+            """,
+        )
+        return pytester
+
+    @pytest.mark.parametrize("workers", ["0", "2"])
+    def test_the_failure_spends_the_budget(self, combined, workers):
+        """test_zz_after sorts last, so sources/slow's copy should be skipped."""
+        result = combined.runpytest("--sources", "sources/*", "-n", workers, "--sources-maxfail=1")
+
+        result.assert_outcomes(passed=4, failed=1, skipped=1)

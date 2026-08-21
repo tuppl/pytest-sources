@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from pytest_sources._core.attribution import attributed, source_map
 from pytest_sources._core.discover import universe
 from pytest_sources._core.nodeid import source_of
 
@@ -51,13 +52,14 @@ class SourceMaxfail:
     def __init__(self, config: pytest.Config) -> None:
         self._limit = config.getoption("sources_maxfail")
         self._source_ids = {source.id for source in universe(config)}
+        self._map = source_map(config)
         self._failures: Counter[str] = Counter()
         self._log = _worker_log(config)
         self._cursor = 0
 
     @pytest.hookimpl(tryfirst=True)
     def pytest_runtest_setup(self, item: pytest.Item) -> None:
-        source = source_of(item.nodeid, self._source_ids)
+        source = self._source_of(item.nodeid)
         if not source:
             return
 
@@ -72,7 +74,7 @@ class SourceMaxfail:
         if not report.failed or report.when not in ("call", "setup"):
             return
 
-        source = source_of(report.nodeid, self._source_ids)
+        source = self._source_of(report.nodeid)
         if not source:
             return
 
@@ -80,6 +82,10 @@ class SourceMaxfail:
             self._failures[source] += 1
         else:
             _append(self._log, source)
+
+    def _source_of(self, nodeid: str) -> str:
+        """The collection-time map's attribution, falling back to the id parse."""
+        return attributed(nodeid, self._map, self._source_ids) or source_of(nodeid, self._source_ids)
 
     def _catch_up(self) -> None:
         """

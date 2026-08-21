@@ -3,6 +3,7 @@ pytest_plugins = [
     "pytest_sources._cmdline",
     "pytest_sources._configure",
     "pytest_sources._generate",
+    "pytest_sources._collect",
     "pytest_sources._report",
     "pytest_sources._fixtures",
     "pytest_sources._runtest",
