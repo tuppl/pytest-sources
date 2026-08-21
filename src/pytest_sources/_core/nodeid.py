@@ -105,8 +105,8 @@ def _call_spec_class() -> type | None:
     if CallSpec2 is None or not isinstance(getattr(CallSpec2, "id", None), property):
         warnings.warn(
             f"pytest-sources could not set the parameter id delimiter to "
-            f"{delimiter()!r}. Sources whose name contains '{delimiter()!r}' may be assigned to "
-            f"the wrong worker.",
+            f"{delimiter()!r}. Parameter ids fall back to pytest's '-' join, so sources "
+            f"whose name contains '-' may be assigned to the wrong worker.",
             pytest.PytestWarning,
             stacklevel=2,
         )

@@ -230,6 +230,14 @@ class TestMovedInternals:
         with pytest.warns(pytest.PytestWarning, match="'#'"):
             _nodeid._call_spec_class()
 
+    def test_the_warning_names_the_join_ids_fall_back_to(self, monkeypatch):
+        """A source containing the delimiter is rejected up front, so it cannot be
+        the hazard. When the patch fails, ids join with pytest's "-" instead."""
+        monkeypatch.setattr("_pytest.python.CallSpec2", object)
+
+        with pytest.warns(pytest.PytestWarning, match="contains '-'"):
+            _nodeid._call_spec_class()
+
     def test_patching_is_skipped_rather_than_half_applied(self, monkeypatch):
         monkeypatch.setattr("_pytest.python.CallSpec2", object)
         monkeypatch.setattr(_nodeid, "_original_id", None)
