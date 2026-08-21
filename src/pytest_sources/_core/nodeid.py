@@ -15,16 +15,33 @@ def delimiter() -> str:
     return _delimiter
 
 
-def source_of(nodeid: str, source_ids: Container[str]) -> str:
+def source_of(nodeid: str, source_ids: Container[str], config: pytest.Config | None = None) -> str:
     """
     Recover the source (directory) a test belongs to from its nodeid.
+
+    An id naming no source is offered to pytest_sources_source_of, so a harness
+    can claim the items pytest-sources never fanned out. Without a config there
+    is no plugin manager to ask and only the id is read.
     """
     nodeid = drop_group(nodeid)
+    parsed = _parsed(nodeid, source_ids)
+    if parsed or config is None:
+        return parsed
+    return _declared(nodeid, source_ids, config)
+
+
+def _parsed(nodeid: str, source_ids: Container[str]) -> str:
     start = nodeid.find("[", nodeid.rfind("::") + 1)
     if start == -1:
         return UNFANNED
     tokens = nodeid[start + 1 :].removesuffix("]").split(delimiter())
     return next((token for token in tokens if token in source_ids), UNFANNED)
+
+
+def _declared(nodeid: str, source_ids: Container[str], config: pytest.Config) -> str:
+    """What a harness declares the nodeid belongs to, ignoring an unknown source."""
+    declared = config.pluginmanager.hook.pytest_sources_source_of(nodeid=nodeid)
+    return declared if declared and declared in source_ids else UNFANNED
 
 
 def drop_group(nodeid: str) -> str:

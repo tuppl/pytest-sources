@@ -1,4 +1,5 @@
 pytest_plugins = [
+    "pytest_sources._hooks",
     "pytest_sources._options",
     "pytest_sources._cmdline",
     "pytest_sources._configure",

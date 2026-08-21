@@ -50,6 +50,7 @@ class SourceMaxfail:
     """
 
     def __init__(self, config: pytest.Config) -> None:
+        self._config = config
         self._limit = config.getoption("sources_maxfail")
         self._source_ids = {source.id for source in universe(config)}
         self._map = source_map(config)
@@ -85,7 +86,7 @@ class SourceMaxfail:
 
     def _source_of(self, nodeid: str) -> str:
         """The collection-time map's attribution, falling back to the id parse."""
-        return attributed(nodeid, self._map, self._source_ids) or source_of(nodeid, self._source_ids)
+        return attributed(nodeid, self._map, self._source_ids) or source_of(nodeid, self._source_ids, self._config)
 
     def _catch_up(self) -> None:
         """

@@ -290,16 +290,22 @@ class TestForeignItems:
                 def repr_failure(self, excinfo):
                     return str(excinfo.value)
 
+            OWNERS = {}
+
             def pytest_collection_modifyitems(config, items):
                 for item in items:
                     if isinstance(item, CheckItem):
                         item.user_properties.append(("source", f"sources/{item.path.parent.name}"))
+                        OWNERS[item.nodeid] = dict(item.user_properties)["source"]
+
+            @pytest.hookimpl(optionalhook=True)
+            def pytest_sources_source_of(nodeid):
+                return OWNERS.get(nodeid)
             """
         )
         pytester.makepyfile("def test_ok(source): ...")
         return pytester
 
-    @pytest.mark.xfail(strict=True, reason="results of items the plugin did not create spend no budget")
     def test_a_foreign_failure_spends_the_budget(self, checks):
         result = checks.runpytest("--sources", "sources/*", "-n", "0", "--sources-maxfail=1")
 

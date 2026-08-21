@@ -124,7 +124,10 @@ class TestPrecedence:
         result = pytester.runpytest("--sources", "sources/*", "-n", "0")
 
         result.assert_outcomes(passed=1)
-        assert rows(result) == {"sources/real": ["0", "0", "0", "0"]}
+        assert rows(result) == {
+            "sources/real": ["0", "0", "0", "0"],
+            "unattributed": ["1", "0", "0", "0"],
+        }
 
 
 class TestUnderXdist:

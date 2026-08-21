@@ -37,27 +37,34 @@ CHARACTERS = {
     Outcome.XPASSED: "X",
 }
 MISSING = "-"
+UNATTRIBUTED = "unattributed"
 
 
 class SourceSummary:
     """Record every outcome per source and print one of three views of it."""
 
     def __init__(self, config: pytest.Config) -> None:
+        self._config = config
         self._sources = [source.id for source in universe(config)]
         self._source_ids = set(self._sources)
         self._map = source_map(config)
         self._style = Summary(config.getoption("sources_summary"))
         self._results: dict[str, dict[str, Outcome]] = {source: {} for source in self._sources}
         self._duration: dict[str, float] = dict.fromkeys(self._sources, 0.0)
+        self._unattributed: dict[str, Outcome] = {}
+        self._unattributed_duration = 0.0
 
     @pytest.hookimpl
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
         source = self._source_of(report)
+        outcome = _outcome(report)
         if not source:
+            self._unattributed_duration += report.duration
+            if outcome is not None:
+                self._unattributed[drop_group(report.nodeid)] = outcome
             return
 
         self._duration[source] += report.duration
-        outcome = _outcome(report)
         if outcome is not None:
             self._results[source][_test_of(report.nodeid, source)] = outcome
 
@@ -72,7 +79,7 @@ class SourceSummary:
         return (
             carried(report, self._source_ids)
             or attributed(report.nodeid, self._map, self._source_ids)
-            or source_of(report.nodeid, self._source_ids)
+            or source_of(report.nodeid, self._source_ids, self._config)
         )
 
     @pytest.hookimpl
@@ -87,7 +94,8 @@ class SourceSummary:
             self._write_grid(terminalreporter)
 
     def _write_counts(self, terminalreporter) -> None:
-        width = max(len("source"), *(len(source) for source in self._sources))
+        labels = [*self._sources, UNATTRIBUTED] if self._unattributed else self._sources
+        width = max([len("source"), *(len(label) for label in labels)])
         terminalreporter.write_line(_counts_row("source", list(Outcome), "time", width))
 
         for source in self._sources:
@@ -99,6 +107,25 @@ class SourceSummary:
                 red=failed,
                 green=not failed,
             )
+
+        if self._unattributed:
+            self._write_unattributed(terminalreporter, width)
+
+    def _write_unattributed(self, terminalreporter, width: int) -> None:
+        """
+        Total the results no mechanism could place, so a gap is never read as a pass.
+
+        A source is only as complete as what reached its row, and an item another
+        collector made lands here until pytest_sources_source_of claims it.
+        """
+        tally = Counter(self._unattributed.values())
+        values = [str(tally[outcome]) for outcome in Outcome]
+        failed = bool(tally[Outcome.FAILED] or tally[Outcome.ERROR])
+        terminalreporter.write_line(
+            _counts_row(UNATTRIBUTED, values, f"{self._unattributed_duration:.2f}s", width),
+            red=failed,
+            yellow=not failed,
+        )
 
     def _write_grid(self, terminalreporter) -> None:
         tests = sorted({test for results in self._results.values() for test in results})

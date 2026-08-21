@@ -6,6 +6,8 @@ validation refuses sources containing it, so the source is always everything
 before the first "+".
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from pytest_sources._core import nodeid as _nodeid
@@ -202,6 +204,47 @@ class TestSourceOf:
 
     def test_keeps_a_source_containing_an_at_sign(self):
         assert source_of("t.py::test_x[submissions/al@ce]", SOURCE_IDS | {"submissions/al@ce"}) == "submissions/al@ce"
+
+
+class TestDeclaredSource:
+    """What a harness claims through pytest_sources_source_of."""
+
+    def config(self, answer, asked=None):
+        """A config whose plugin manager answers the hook, recording what it was asked."""
+
+        def hook(nodeid):
+            if asked is not None:
+                asked.append(nodeid)
+            return answer
+
+        return SimpleNamespace(pluginmanager=SimpleNamespace(hook=SimpleNamespace(pytest_sources_source_of=hook)))
+
+    def test_a_claim_places_an_id_that_names_no_source(self):
+        assert source_of("checks/a.check::verify", SOURCE_IDS, self.config("submissions/alice")) == "submissions/alice"
+
+    def test_a_claim_outside_the_run_is_ignored(self):
+        assert source_of("checks/a.check::verify", SOURCE_IDS, self.config("submissions/ghost")) == UNFANNED
+
+    def test_no_claim_leaves_the_id_unfanned(self):
+        assert source_of("checks/a.check::verify", SOURCE_IDS, self.config(None)) == UNFANNED
+
+    def test_an_id_naming_a_source_is_never_offered(self):
+        asked: list[str] = []
+        nodeid = "t.py::test_x[submissions/alice]"
+
+        assert source_of(nodeid, SOURCE_IDS, self.config("submissions/alice2", asked)) == "submissions/alice"
+        assert asked == []
+
+    def test_the_group_is_dropped_before_the_hook_is_asked(self):
+        """A harness knows its items by nodeid, not by the scope xdist schedules them in."""
+        asked: list[str] = []
+
+        source_of("checks/a.check::verify@db", SOURCE_IDS, self.config(None, asked))
+
+        assert asked == ["checks/a.check::verify"]
+
+    def test_without_a_config_there_is_nothing_to_ask(self):
+        assert source_of("checks/a.check::verify", SOURCE_IDS) == UNFANNED
 
 
 class TestMovedInternals:

@@ -339,8 +339,8 @@ class TestForeignItems:
     """Items another collector creates, one artifact per source.
 
     The plugin never parametrised them, so no token in their nodeid names a
-    source and their results are dropped from the table. The conftest declares
-    the owner on user_properties, which is the association a fix would read.
+    source. The conftest declares the owner through pytest_sources_source_of,
+    reading back the property it recorded at collection.
     """
 
     @pytest.fixture
@@ -369,16 +369,22 @@ class TestForeignItems:
                 def repr_failure(self, excinfo):
                     return str(excinfo.value)
 
+            OWNERS = {}
+
             def pytest_collection_modifyitems(config, items):
                 for item in items:
                     if isinstance(item, CheckItem):
                         item.user_properties.append(("source", f"sources/{item.path.parent.name}"))
+                        OWNERS[item.nodeid] = dict(item.user_properties)["source"]
+
+            @pytest.hookimpl(optionalhook=True)
+            def pytest_sources_source_of(nodeid):
+                return OWNERS.get(nodeid)
             """
         )
         pytester.makepyfile("def test_ok(source): ...")
         return pytester
 
-    @pytest.mark.xfail(strict=True, reason="results of items the plugin did not create are dropped")
     def test_a_failing_check_counts_against_its_source(self, checks):
         result = checks.runpytest("--sources", "sources/*", "-n", "0")
 
@@ -387,6 +393,67 @@ class TestForeignItems:
             "sources/good": ["2", "0", "0", "0"],
             "sources/slow": ["1", "1", "0", "0"],
         }
+
+
+class TestUnattributed:
+    """Results no mechanism could place, so a gap never reads as a pass."""
+
+    @pytest.fixture
+    def unclaimed(self, pytester):
+        """A per-source artifact whose collector declares no owner."""
+        for name in ("good", "slow"):
+            (pytester.path / "sources" / name).mkdir(parents=True)
+            (pytester.path / "checks" / name).mkdir(parents=True)
+            (pytester.path / "checks" / name / "a.check").write_text("x\n")
+        pytester.makeconftest(
+            """
+            import pytest
+
+            def pytest_collect_file(parent, file_path):
+                if file_path.suffix == ".check":
+                    return CheckFile.from_parent(parent, path=file_path)
+
+            class CheckFile(pytest.File):
+                def collect(self):
+                    yield CheckItem.from_parent(self, name="verify")
+
+            class CheckItem(pytest.Item):
+                def runtest(self):
+                    if self.path.parent.name == "slow":
+                        raise AssertionError("check failed")
+
+                def repr_failure(self, excinfo):
+                    return str(excinfo.value)
+            """
+        )
+        pytester.makepyfile("def test_ok(source): ...")
+        return pytester
+
+    def test_results_nothing_claims_are_totalled_in_their_own_row(self, unclaimed):
+        result = unclaimed.runpytest("--sources", "sources/*", "-n", "0")
+
+        assert rows(result) == {
+            "sources/good": ["1", "0", "0", "0"],
+            "sources/slow": ["1", "0", "0", "0"],
+            "unattributed": ["1", "1", "0", "0"],
+        }
+
+    def test_the_row_is_there_under_xdist_too(self, unclaimed):
+        """No worker could attribute them either, so the reports arrive bare."""
+        result = unclaimed.runpytest("--sources", "sources/*", "-n", "2")
+
+        assert rows(result)["unattributed"] == ["1", "1", "0", "0"]
+
+    def test_the_row_ends_with_a_duration(self, unclaimed):
+        result = unclaimed.runpytest("--sources", "sources/*", "-n", "0")
+
+        line = next(line for line in result.outlines if line.startswith("unattributed"))
+        assert line.split()[-1].endswith("s")
+
+    def test_no_row_appears_when_every_result_is_placed(self, mixed):
+        result = mixed.runpytest("--sources", "submissions/*", "-n", "0")
+
+        assert "unattributed" not in rows(result)
 
 
 class TestCombinedParametrize:

@@ -40,11 +40,11 @@ class SourceScheduling(LoadScopeScheduling):
         if self._within is not None:
             within = self._within(nodeid)
             if within != nodeid:
-                return f"{source_of(nodeid, self._source_ids)}{delimiter()}{within}"
+                return f"{source_of(nodeid, self._source_ids, self.config)}{delimiter()}{within}"
 
         if self._scopes is not None and nodeid in self._scopes:
             return self._scopes[nodeid]
-        return source_of(nodeid, self._source_ids)
+        return source_of(nodeid, self._source_ids, self.config)
 
     def _assign_work_unit(self, node: WorkerController) -> None:
         self._served.add(node)
@@ -84,7 +84,7 @@ class SourceScheduling(LoadScopeScheduling):
         """
         sources: dict[str, list[str]] = {}
         for nodeid in collection:
-            sources.setdefault(source_of(nodeid, self._source_ids), []).append(nodeid)
+            sources.setdefault(source_of(nodeid, self._source_ids, self.config), []).append(nodeid)
 
         # Processes share a budget approximately, so a source under
         # --sources-maxfail stays whole and spends its own exactly.
